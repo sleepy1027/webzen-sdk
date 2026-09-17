@@ -26,10 +26,12 @@ std::unique_ptr<Command> CommandRegistry::Create(std::string_view commandId) con
 asio::awaitable<std::string> CommandRegistry::Dispatch(std::string commandId, std::string requestJson) const {
     // Only RequestId is read here -- deliberately not the concrete Request
     // subtype, since CommandRegistry has no idea which one a given command
-    // id expects. Glaze ignores unknown keys by default, so this works
-    // regardless of what else is in requestJson.
+    // id expects. Glaze's default opts (plain read_json) error out on the
+    // first unknown key and stop parsing right there, so if request_id
+    // happened to come after e.g. provider_id in the JSON, it would never
+    // get read -- error_on_unknown_keys=false is required here, not optional.
     Request baseRequest;
-    (void)glz::read_json(baseRequest, requestJson);  // best-effort: a malformed/missing request_id just stays empty
+    (void)glz::read<glz::opts{.error_on_unknown_keys = false}>(baseRequest, requestJson);
 
     CommandOutcome outcome;
     auto command = Create(commandId);

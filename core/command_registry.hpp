@@ -44,11 +44,7 @@ class Command : public ICommand {
 public:
     asio::awaitable<std::string> Execute(std::string requestJson) final {
         TRequest request;
-        // error_on_unknown_keys=false: requestJson may legitimately carry
-        // fields this command doesn't declare, and Glaze's default stops
-        // parsing at the first such field -- see the CommandRegistry bug
-        // this exact policy fixed.
-        const bool parseFailed = bool(glz::read<glz::opts{.error_on_unknown_keys = false}>(request, requestJson));
+        const bool parseFailed = bool(ReadJson(request, requestJson));
 
         std::string resultJson;
         if (parseFailed) {

@@ -50,6 +50,21 @@ concept ResultLike = requires(T& t) {
     { t.ErrorMessage } -> std::convertible_to<std::string&>;
 };
 
+// The one way to read JSON in this codebase -- never glz::read_json
+// directly. Glaze's default opts (what glz::read_json uses) stop parsing at
+// the first key the target type doesn't declare, silently leaving every
+// field after it at its default value. That bit CommandRegistry once
+// (a RequestId placed after an unrecognized field never got read), and the
+// same risk applies to any JSON this SDK doesn't fully control the shape of
+// -- a server response that gains a field a given SDK version doesn't know
+// about yet, or a locally-stored token written by a newer SDK version.
+// Same signature/contract as glz::read_json (returns a bool-convertible
+// error_ctx; truthy means failure) so it's a drop-in replacement.
+template <typename T>
+auto ReadJson(T& value, const std::string& json) {
+    return glz::read<glz::opts{.error_on_unknown_keys = false}>(value, json);
+}
+
 }  // namespace webzen
 
 // glz::snake_case: PascalCase member names get automatically reflected

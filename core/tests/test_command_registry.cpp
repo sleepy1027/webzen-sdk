@@ -48,13 +48,13 @@ REGISTER_COMMAND("test.echo", EchoCommand)
 namespace {
 webzen::Result ParseResult(const std::string& json) {
     webzen::Result result;
-    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(result, json));
+    REQUIRE_FALSE(webzen::ReadJson(result, json));
     return result;
 }
 
 ResultEcho ParseEchoResult(const std::string& json) {
     ResultEcho result;
-    REQUIRE_FALSE(glz::read_json(result, json));
+    REQUIRE_FALSE(webzen::ReadJson(result, json));
     return result;
 }
 }  // namespace

@@ -5,7 +5,7 @@ namespace webzen {
 namespace {
 std::string ExtractRequestId(const std::string& requestJson) {
     Request baseRequest;
-    (void)glz::read<glz::opts{.error_on_unknown_keys = false}>(baseRequest, requestJson);
+    (void)ReadJson(baseRequest, requestJson);
     return baseRequest.RequestId;
 }
 

@@ -45,7 +45,7 @@ asio::awaitable<AuthResult> AuthService::Login(RequestLogin request) {
     }
 
     AuthTokenDto token;
-    if (glz::read_json(token, httpResult.Response.Body)) {
+    if (ReadJson(token, httpResult.Response.Body)) {
         co_return AuthResult{.Success = false, .Error = AuthError::NetworkError};
     }
 
@@ -78,7 +78,7 @@ asio::awaitable<AuthResult> AuthService::RefreshSession() {
     }
 
     AuthTokenDto token;
-    if (glz::read_json(token, httpResult.Response.Body)) {
+    if (ReadJson(token, httpResult.Response.Body)) {
         co_return AuthResult{.Success = false, .Error = AuthError::NetworkError};
     }
 
@@ -118,7 +118,7 @@ std::optional<AuthTokenDto> AuthService::LoadPersistedToken() const {
         return std::nullopt;
     }
     AuthTokenDto token;
-    if (glz::read_json(token, *stored)) {
+    if (ReadJson(token, *stored)) {
         return std::nullopt;
     }
     return token;

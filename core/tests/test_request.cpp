@@ -22,7 +22,7 @@ TEST_CASE("webzen::Result round-trips through snake_case JSON keys", "[request]"
     CHECK(json == R"({"request_id":"r1","success":true,"error_code":"e","error_message":"m"})");
 
     webzen::Result parsed;
-    REQUIRE_FALSE(glz::read_json(parsed, json));
+    REQUIRE_FALSE(webzen::ReadJson(parsed, json));
     CHECK(parsed.RequestId == "r1");
     CHECK(parsed.Success);
     CHECK(parsed.ErrorCode == "e");

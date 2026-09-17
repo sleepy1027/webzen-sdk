@@ -62,6 +62,29 @@ TEST_CASE("AuthService.Login surfaces a network error instead of hanging or thro
     CHECK(result.Error == webzen::auth::AuthError::NetworkError);
 }
 
+TEST_CASE("AuthService loads a persisted token even with fields it doesn't know about yet", "[auth_service]") {
+    // Regression test: LoadPersistedToken (and the HTTP-response reads in
+    // Login/RefreshSession) used to call glz::read_json directly, whose
+    // default opts stop parsing at the first unrecognized key -- the same
+    // bug CommandRegistry had. A token written by a newer SDK version (or a
+    // server response with a field this build doesn't parse yet) could
+    // silently fail to load if that extra field came before a field this
+    // build does know about.
+    asio::io_context io;
+    webzen::HttpClient httpClient(io.get_executor());
+
+    InMemorySecureStorage storage;
+    FakeDeviceInfo deviceInfo;
+    webzen::adapter::PlatformAdapter platform{.SecureStorage = &storage, .DeviceInfo = &deviceInfo};
+
+    storage.Set("webzen.auth.token", R"({"issuer":"future-field","user_id":"u1","access_token":"a"})");
+
+    webzen::auth::AuthService authService(httpClient, platform);
+    REQUIRE(authService.CurrentToken().has_value());
+    CHECK(authService.CurrentToken()->UserId == "u1");
+    CHECK(authService.CurrentToken()->AccessToken == "a");
+}
+
 TEST_CASE("AuthService persists and clears the session token via the platform adapter", "[auth_service]") {
     asio::io_context io;
     webzen::HttpClient httpClient(io.get_executor());

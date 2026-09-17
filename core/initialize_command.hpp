@@ -1,7 +1,6 @@
 #pragma once
 
 #include "core/command_registry.hpp"
-#include "core/request.hpp"
 
 #include <glaze/glaze.hpp>
 
@@ -9,7 +8,8 @@
 
 namespace webzen {
 
-struct RequestInitialize : Request {
+struct RequestInitialize {
+    std::string RequestId;
     std::string BaseUrl;
 };
 
@@ -17,15 +17,12 @@ struct RequestInitialize : Request {
 // back via Sdk::Instance().BaseUrl()), not a business feature, but it still
 // goes through DispatchCommand like everything else: there is no separate
 // Initialize entry point on the C ABI (see core/sdk_c_api.h).
-class InitializeCommand : public Command {
-public:
-    asio::awaitable<CommandOutcome> Execute(std::string requestJson) override;
+class InitializeCommand : public TypedCommand<RequestInitialize> {
+protected:
+    asio::awaitable<CommandOutcome> ExecuteTyped(RequestInitialize request) override;
 };
 
 }  // namespace webzen
 
 template <>
-struct glz::meta<webzen::RequestInitialize> {
-    using T = webzen::RequestInitialize;
-    static constexpr auto value = glz::object(SDK_FIELD(T, RequestId), SDK_FIELD(T, BaseUrl));
-};
+struct glz::meta<webzen::RequestInitialize> : glz::snake_case {};

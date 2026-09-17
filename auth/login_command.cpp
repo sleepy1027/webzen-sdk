@@ -6,12 +6,7 @@ namespace webzen::auth {
 
 LoginCommand::LoginCommand() : authService_(GetAuthService()) {}
 
-asio::awaitable<CommandOutcome> LoginCommand::Execute(std::string requestJson) {
-    RequestLogin request;
-    if (glz::read_json(request, requestJson)) {
-        co_return CommandOutcome{.Success = false, .ErrorCode = "invalid_request", .ErrorMessage = "malformed auth.login request"};
-    }
-
+asio::awaitable<CommandOutcome> LoginCommand::ExecuteTyped(RequestLogin request) {
     const AuthResult result = co_await authService_.Login(std::move(request));
 
     if (!result.Success) {

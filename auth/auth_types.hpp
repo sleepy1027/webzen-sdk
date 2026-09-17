@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core/request.hpp"
-
 #include <glaze/glaze.hpp>
 
 #include <cstdint>
@@ -9,7 +7,8 @@
 
 namespace webzen::auth {
 
-struct RequestLogin : Request {
+struct RequestLogin {
+    std::string RequestId;
     std::string ProviderId;     // "guest" | "google" | "apple" | ...
     std::string ProviderToken;
     std::string DeviceId;
@@ -24,24 +23,11 @@ struct AuthTokenDto {
 
 }  // namespace webzen::auth
 
+// glz::snake_case: see core/request.hpp -- every DTO in this codebase uses
+// this instead of hand-listing fields, since these are plain structs with
+// no base class.
 template <>
-struct glz::meta<webzen::auth::RequestLogin> {
-    using T = webzen::auth::RequestLogin;
-    static constexpr auto value = glz::object(
-        SDK_FIELD(T, RequestId),
-        SDK_FIELD(T, ProviderId),
-        SDK_FIELD(T, ProviderToken),
-        SDK_FIELD(T, DeviceId)
-    );
-};
+struct glz::meta<webzen::auth::RequestLogin> : glz::snake_case {};
 
 template <>
-struct glz::meta<webzen::auth::AuthTokenDto> {
-    using T = webzen::auth::AuthTokenDto;
-    static constexpr auto value = glz::object(
-        SDK_FIELD(T, UserId),
-        SDK_FIELD(T, AccessToken),
-        SDK_FIELD(T, RefreshToken),
-        SDK_FIELD(T, ExpiresAt)
-    );
-};
+struct glz::meta<webzen::auth::AuthTokenDto> : glz::snake_case {};

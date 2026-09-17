@@ -27,8 +27,10 @@ Each module keeps its headers and sources side by side in one folder — no
 side: `Webzen_DispatchCommand(command_id, request_json, callback)`. Even SDK
 bootstrapping is a command (`"core.initialize"`) — there's no separate
 `Initialize()`/`Login()` pair of native entry points to keep in sync.
-Every request is a `Request` subtype and every result is the same `Result`
-shape (`core/request.hpp`); a request's `request_id` is echoed back on its
+Every request is a plain struct with its own `request_id` field (no shared
+base class — see the architecture skill's JSON section for why) and every
+result is the same `Result` shape (`core/request.hpp`); a request's
+`request_id` is echoed back on its
 result so a caller with several requests in flight can tell which callback
 goes with which response, without the C ABI needing a per-call `user_data`.
 

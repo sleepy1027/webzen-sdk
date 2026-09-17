@@ -60,7 +60,7 @@ Unreal / Unity
 
 C ABI(`core/sdk_c_api.h`)는 함수 하나만 노출한다: `Webzen_DispatchCommand(command_id, request_json, callback)`. `Webzen_Initialize(base_url)` 같은 별도의 라이프사이클 진입점을 두지 않는다 — SDK 초기화조차 `"core.initialize"`라는 커맨드로 다룬다 (`core/initialize_command.hpp`). `Sdk`는 첫 `DispatchCommand` 호출 시 내부적으로 io_context 스레드를 lazy하게 시작한다. 새 기능이 "매번 호출 전에 별도로 초기화해야 하는" 진입점을 만들고 싶어지면, 그 대신 커맨드로 표현할 방법을 먼저 찾는다.
 
-콜백에는 `user_data`를 넘기지 않는다. 모든 요청은 `webzen::Request`(`core/request.hpp`)를 상속하고 `RequestId` 필드를 갖는다. `CommandRegistry::Dispatch`가 들어온 JSON에서 `RequestId`만 파싱해 커맨드 실행 결과(`webzen::Result`)에 그대로 echo해준다 — 도메인 커맨드 코드는 이걸 신경 쓸 필요가 없다. 언어별 바인딩(Kotlin/Obj-C/C#/Unreal C++)은 정적 콜백 트램폴린 하나만 등록하고, `RequestId → 콜백` 맵으로 상관관계를 처리한다. 이렇게 하면 콜백 컨텍스트를 JNI GlobalRef나 Obj-C 블록, C# GCHandle 같은 걸로 FFI 경계 너머까지 들고 다닐 필요가 없다.
+콜백에는 `user_data`를 넘기지 않는다. 모든 요청 타입은 `RequestId` 필드를 직접 선언한다 (상속으로 공유하지 않는다 — 아래 JSON 절 참고). `CommandRegistry::Dispatch`가 `webzen::Request`(`core/request.hpp`, `RequestId` 하나만 있는 독립 구조체)로 들어온 JSON을 부분 파싱해 `RequestId`만 뽑아내고, 커맨드 실행 결과(`webzen::Result`)에 그대로 echo해준다 — 도메인 커맨드 코드는 이걸 신경 쓸 필요가 없다. 언어별 바인딩(Kotlin/Obj-C/C#/Unreal C++)은 정적 콜백 트램폴린 하나만 등록하고, `RequestId → 콜백` 맵으로 상관관계를 처리한다. 이렇게 하면 콜백 컨텍스트를 JNI GlobalRef나 Obj-C 블록, C# GCHandle 같은 걸로 FFI 경계 너머까지 들고 다닐 필요가 없다.
 
 콜백이 받는 결과 타입은 항상 하나, `webzen::Result`다 (`RequestId`, `Success`, `ErrorCode`, `ErrorMessage`, 그리고 도메인별 페이로드가 이미 직렬화된 JSON 문자열인 `Data`). 도메인마다 다른 콜백 타입을 만들지 않는다.
 
@@ -92,29 +92,23 @@ Kotlin(`platform/android/aar`)이나 Objective-C++(`platform/ios`) 코드는 여
 
 * Glaze 사용 (nlohmann::json 아님). 이유: 컴파일타임 리플렉션이라 매크로 부담이 적고, 성능이 훨씬 빠르며, 필드별 키 이름 커스터마이징이 쉽다.
 * JSON 키는 서버/클라이언트 관례에 맞춰 snake_case를 쓰고, C++ 멤버는 PascalCase를 쓴다. 약어는 `Url`, `Id`처럼 단일 캐피탈 토큰으로 정규화한다 (`URL`, `ID` 금지) — 이래야 케이스 변환이 항상 예측 가능하다.
-* 키 이름은 손으로 문자열을 적지 말고, 아래처럼 컴파일타임 변환 매크로로 멤버 이름에서 자동 계산한다:
+* 키 이름은 손으로 문자열을 적지 말고, Glaze의 자동 리플렉션 + `glz::snake_case`로 자동 계산한다. DTO가 상속 없는 순수 aggregate 구조체(공개 멤버만, 커스텀 생성자 없음)면 이 한 줄이면 끝이다:
 
 ```cpp
-// utils/json_naming.hpp
-template <fixed_string Name>
-consteval auto to_snake_case();  // PascalCase -> snake_case, 컴파일타임 계산
-
-#define SDK_FIELD(T, member) to_snake_case<#member>(), &T::member
-```
-
-```cpp
-template <>
-struct glz::meta<AuthTokenDto> {
-    using T = AuthTokenDto;
-    static constexpr auto value = glz::object(
-        SDK_FIELD(T, UserId),       // -> "user_id"
-        SDK_FIELD(T, AccessToken),  // -> "access_token"
-        SDK_FIELD(T, ExpiresAt)     // -> "expires_at"
-    );
+struct AuthTokenDto {
+    std::string UserId;
+    std::string AccessToken;
+    std::int64_t ExpiresAt = 0;
 };
+
+template <>
+struct glz::meta<AuthTokenDto> : glz::snake_case {};
+// -> JSON: {"user_id":..., "access_token":..., "expires_at":...}
 ```
 
-새 DTO를 추가할 땐 이 패턴을 따른다. 키 이름을 직접 문자열로 하드코딩하지 않는다 (오타/불일치 방지).
+  멤버 이름 그대로 자동으로 리플렉션되고 snake_case로 변환되므로, 멤버를 추가/삭제해도 `glz::meta` 쪽엔 손댈 게 없다. (예전엔 `SDK_FIELD(T, Member)`를 멤버마다 손으로 나열하는 자체 매크로를 썼는데, Glaze가 이미 이 기능을 내장하고 있어서 걷어냈다 — 자체 구현판은 멤버 하나 추가할 때마다 별도로 등록해줘야 했고, 그걸 잊어도 컴파일 에러가 안 나는 게 문제였다.)
+* **DTO에 상속을 쓰지 않는다.** Glaze v8.0.0의 자동 리플렉션은 베이스 클래스가 있는 타입에서 컴파일 에러를 낸다 (직접 확인함 — 이후 버전에서 고쳐질 수도 있지만 지금은 그렇다). `RequestLogin`, `RequestInitialize`처럼 공통 필드(`RequestId`)가 필요한 타입들은 각자 그 필드를 직접 선언한다 (한 줄 중복). 여러 Request 타입에 걸쳐 공통으로 동작해야 하는 로직(파싱, 디스패치)은 대신 템플릿으로 처리한다 — `core/command_registry.hpp`의 `TypedCommand<TRequest>` 참고. 커맨드를 새로 만들 땐 `Command`를 직접 상속하지 말고 `TypedCommand<TRequest>`를 상속해서 `ExecuteTyped(TRequest)`만 구현한다; JSON 파싱과 에러 처리는 템플릿이 대신 해준다.
+* `glz::read`/`glz::read_json` 기본 옵션(`error_on_unknown_keys = true`)은 모르는 키를 만나면 그 자리에서 파싱을 멈춘다 — 그 뒤에 나오는, 그 타입이 원래 알고 있는 필드조차 못 읽는다. 그래서 요청 JSON을 읽는 곳은 전부 `glz::read<glz::opts{.error_on_unknown_keys = false}>`를 명시적으로 쓴다 (`TypedCommand::Execute`, `CommandRegistry::Dispatch`가 이미 그렇게 함). 이 프로젝트에서 한 번 실제로 이 순서 의존성 때문에 `RequestId` correlation이 조용히 깨지는 버그가 났었다 — `glz::read_json`(기본 옵션) 쓰지 않는다.
 
 ### 비동기 처리 (async/await 대체)
 
@@ -128,13 +122,14 @@ struct glz::meta<AuthTokenDto> {
 * 대신 self-registering factory 패턴을 쓴다: 각 커맨드 클래스가 정적 초기화 시점에 매크로로 자기 자신을 레지스트리(`map<string/ID, factory_fn>`)에 등록하고, 런타임엔 문자열/ID로 그 맵에서 찾아 인스턴스를 만든다.
 
 ```cpp
-class LoginCommand : public Command {
-    // ...
+class LoginCommand : public TypedCommand<RequestLogin> {
+protected:
+    asio::awaitable<CommandOutcome> ExecuteTyped(RequestLogin request) override { /* ... */ }
 };
-REGISTER_COMMAND("login", LoginCommand);
+REGISTER_COMMAND("auth.login", LoginCommand);
 ```
 
-이 패턴은 Unreal 자체의 `UCLASS`/`UPROPERTY` + UHT(코드생성) 방식과 개념적으로 같으니, 팀에 이미 익숙한 사고방식이라고 보면 된다. 새 커맨드를 추가할 때 이 매크로를 빠뜨리지 않는다.
+이 패턴은 Unreal 자체의 `UCLASS`/`UPROPERTY` + UHT(코드생성) 방식과 개념적으로 같으니, 팀에 이미 익숙한 사고방식이라고 보면 된다. 새 커맨드를 추가할 때 이 매크로를 빠뜨리지 않는다. `Command`를 직접 상속하지 않고 `TypedCommand<TRequest>`를 상속하는 이유는 JSON 절 참고 — Request 타입들이 서로 상속 관계가 아니라서, "타입별로 파싱해서 호출"을 공유하는 역할을 상속 대신 템플릿이 맡는다.
 
 ## 코드를 작성할 때 판단 순서
 

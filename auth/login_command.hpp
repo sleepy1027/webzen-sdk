@@ -10,11 +10,12 @@ namespace webzen::auth {
 // login_command.cpp. Default-constructible (as CommandFactory requires) --
 // it resolves the live AuthService via GetAuthService() rather than taking
 // it as a constructor argument.
-class LoginCommand : public Command {
+class LoginCommand : public TypedCommand<RequestLogin> {
 public:
     LoginCommand();
 
-    asio::awaitable<CommandOutcome> Execute(std::string requestJson) override;
+protected:
+    asio::awaitable<CommandOutcome> ExecuteTyped(RequestLogin request) override;
 
 private:
     AuthService& authService_;

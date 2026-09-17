@@ -2,6 +2,8 @@
 
 #include <asio/awaitable.hpp>
 
+#include <glaze/glaze.hpp>
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -25,10 +27,39 @@ struct CommandOutcome {
 class Command {
 public:
     virtual ~Command() = default;
-    // requestJson is the raw JSON body of whatever Request subtype this
-    // command expects (RequestLogin, RequestInitialize, ...); the command
-    // parses it itself via glz::read_json.
+    // requestJson is the raw JSON body of whatever request type this
+    // command expects (RequestLogin, RequestInitialize, ...). Most commands
+    // should derive from TypedCommand<TRequest> below instead of
+    // implementing this directly -- it does the JSON parsing for you.
     virtual asio::awaitable<CommandOutcome> Execute(std::string requestJson) = 0;
+};
+
+// Request DTOs are plain, unrelated structs -- no shared base class (see
+// request.hpp for why: Glaze's automatic reflection, which is what lets a
+// DTO skip writing glz::meta by hand, doesn't support base classes). So the
+// "one common way to call Execute" the architecture skill wants for command
+// implementations comes from a template instead of from inheriting a common
+// Request type: TypedCommand<TRequest> parses requestJson into TRequest
+// once, here, so every command implementation is written against a typed
+// request and never touches glz::read directly.
+template <typename TRequest>
+class TypedCommand : public Command {
+public:
+    asio::awaitable<CommandOutcome> Execute(std::string requestJson) final {
+        TRequest request;
+        // error_on_unknown_keys=false: requestJson may legitimately carry
+        // fields this command doesn't declare (e.g. request_id is on every
+        // request but plenty of commands never need to read it back out),
+        // and Glaze's default stops parsing at the first such field --
+        // see the CommandRegistry::Dispatch bug this exact policy fixed.
+        if (glz::read<glz::opts{.error_on_unknown_keys = false}>(request, requestJson)) {
+            co_return CommandOutcome{.Success = false, .ErrorCode = "invalid_request"};
+        }
+        co_return co_await ExecuteTyped(std::move(request));
+    }
+
+protected:
+    virtual asio::awaitable<CommandOutcome> ExecuteTyped(TRequest request) = 0;
 };
 
 using CommandFactory = std::function<std::unique_ptr<Command>()>;

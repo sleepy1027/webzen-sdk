@@ -43,9 +43,10 @@ struct FRequestLogin : public FWebzenRequest
 	FString DeviceId;
 };
 
-// The one shape every Dispatch callback receives, whatever the command
-// (core/request.hpp's webzen::Result, mirrored field for field). Parse Data
-// yourself once you know which request you sent.
+// The four fields every command's result starts with (core/request.hpp's
+// webzen::Result). A command with nothing more to report uses this
+// directly (Initialize does); one that returns more has its own result
+// struct with these same four fields plus its own -- see FResultLogin.
 USTRUCT(BlueprintType)
 struct FWebzenResult
 {
@@ -62,12 +63,43 @@ struct FWebzenResult
 
 	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
 	FString ErrorMessage;
+};
+
+// "auth.login"'s result -- the wire JSON has UserId/AccessToken/... as
+// top-level fields alongside RequestId/Success/..., not nested inside a
+// generic blob, so this mirrors core::auth::ResultLogin field for field.
+USTRUCT(BlueprintType)
+struct FResultLogin
+{
+	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
-	FString Data;
+	FString RequestId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
+	bool bSuccess = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
+	FString ErrorCode;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
+	FString ErrorMessage;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
+	FString UserId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
+	FString AccessToken;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
+	FString RefreshToken;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Webzen SDK")
+	int64 ExpiresAt = 0;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWebzenResultDelegate, const FWebzenResult&, Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWebzenLoginResultDelegate, const FResultLogin&, Result);
 
 /**
  * Blueprint- and C++-facing entry point, one per game instance. Calls
@@ -78,6 +110,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWebzenResultDelegate, const FWebzen
  * link the native artifact at build time (WebzenSDK.Build.cs), while
  * Android's libwebzen_core.so lives inside the AAR UBT embeds, so it's
  * resolved with dlopen/dlsym once at runtime instead.
+ *
+ * Blueprint dynamic delegates need a fixed signature, so unlike the Unity
+ * bridge's single generic Dispatch<TResult>(), each command gets its own
+ * UFUNCTION with its own result struct/delegate type (Login/FResultLogin/
+ * FWebzenLoginResultDelegate vs. Initialize/FWebzenResult/
+ * FWebzenResultDelegate) -- both are thin wrappers over the same private
+ * DispatchRaw.
  */
 UCLASS()
 class WEBZENSDK_API UWebzenSDKSubsystem : public UGameInstanceSubsystem
@@ -85,19 +124,24 @@ class WEBZENSDK_API UWebzenSDKSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	// Generic entry point every typed wrapper below is built on.
-	void Dispatch(const FString& CommandId, const FString& RequestJson, const FWebzenResultDelegate& OnComplete);
-
 	UFUNCTION(BlueprintCallable, Category = "Webzen SDK")
 	void Initialize(const FRequestInitialize& Request, const FWebzenResultDelegate& OnComplete);
 
 	UFUNCTION(BlueprintCallable, Category = "Webzen SDK")
-	void Login(const FRequestLogin& Request, const FWebzenResultDelegate& OnComplete);
+	void Login(const FRequestLogin& Request, const FWebzenLoginResultDelegate& OnComplete);
 
 	// Exposed so the free function in WebzenSDKSubsystem.cpp that receives
 	// the native callback (which can't be a UObject member -- it has to be
 	// a plain C function pointer) can look a RequestId back up to the
-	// delegate Dispatch stored for it.
-	static TMap<FString, FWebzenResultDelegate>& Pending();
+	// handler DispatchRaw stored for it. The handler takes the raw result
+	// JSON rather than a fixed struct because different pending calls may
+	// expect different result types (FWebzenResult vs. FResultLogin, ...).
+	static TMap<FString, TFunction<void(const FString&)>>& Pending();
 	static FCriticalSection& PendingLock();
+
+private:
+	// Generic entry point every typed wrapper above is built on. OnRawResult
+	// receives the full result JSON string; the wrapper deserializes it into
+	// whatever struct its own delegate expects.
+	void DispatchRaw(const FString& CommandId, const FString& RequestJson, TFunction<void(const FString&)> OnRawResult);
 };

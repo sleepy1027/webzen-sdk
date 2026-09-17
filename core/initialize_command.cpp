@@ -4,9 +4,9 @@
 
 namespace webzen {
 
-asio::awaitable<CommandOutcome> InitializeCommand::ExecuteTyped(RequestInitialize request) {
+asio::awaitable<Result> InitializeCommand::ExecuteTyped(RequestInitialize request) {
     Sdk::Instance().SetBaseUrl(std::move(request.BaseUrl));
-    co_return CommandOutcome{.Success = true};
+    co_return Result{.Success = true};
 }
 
 }  // namespace webzen

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/request.hpp"
+
 #include <asio/awaitable.hpp>
 
 #include <glaze/glaze.hpp>
@@ -12,57 +14,63 @@
 
 namespace webzen {
 
-// What a Command::Execute actually produces, before RequestId gets stitched
-// back in. Kept separate from the public webzen::Result (request.hpp)
-// because a command implementation never needs to see or forward the
-// RequestId itself -- CommandRegistry::Dispatch owns that entirely, so a
-// command can't forget to copy it (there's nothing to copy).
-struct CommandOutcome {
-    bool Success = false;
-    std::string ErrorCode;
-    std::string ErrorMessage;
-    std::string Data;
+// Raw, type-erased command interface. CommandRegistry stores commands by
+// string id (self-registering factory, see REGISTER_COMMAND below) and
+// can't know the concrete request/result types at that point, so it needs
+// a common non-template base to hold them behind -- this is that base.
+// Almost nothing should implement this directly; derive from
+// Command<TRequest, TResult> below instead, which handles the JSON parsing/
+// serialization this interface leaves as a raw string in and raw string out.
+class ICommand {
+public:
+    virtual ~ICommand() = default;
+    // requestJson in, a full webzen::Result-shaped (or ResultXXX-shaped)
+    // JSON string out -- NOT just a domain payload; RequestId, Success,
+    // ErrorCode, ErrorMessage are already in there. CommandRegistry::Dispatch
+    // only adds this wrapping itself for the unknown-command/exception cases,
+    // where there's no command to have done it.
+    virtual asio::awaitable<std::string> Execute(std::string requestJson) = 0;
 };
 
-class Command {
+// What almost every command actually derives from. Parses requestJson into
+// TRequest, calls ExecuteTyped, stamps RequestId onto whatever TResult it
+// returns (so ExecuteTyped never has to -- see request.hpp on why that's
+// plumbing, not business logic), and serializes the result. TResult
+// defaults to the plain Result for commands with nothing more to report
+// than success/failure; give it a richer ResultXXX (see auth/auth_types.hpp's
+// ResultLogin) when a command needs to return more.
+template <RequestLike TRequest, ResultLike TResult = Result>
+class Command : public ICommand {
 public:
-    virtual ~Command() = default;
-    // requestJson is the raw JSON body of whatever request type this
-    // command expects (RequestLogin, RequestInitialize, ...). Most commands
-    // should derive from TypedCommand<TRequest> below instead of
-    // implementing this directly -- it does the JSON parsing for you.
-    virtual asio::awaitable<CommandOutcome> Execute(std::string requestJson) = 0;
-};
-
-// Request DTOs are plain, unrelated structs -- no shared base class (see
-// request.hpp for why: Glaze's automatic reflection, which is what lets a
-// DTO skip writing glz::meta by hand, doesn't support base classes). So the
-// "one common way to call Execute" the architecture skill wants for command
-// implementations comes from a template instead of from inheriting a common
-// Request type: TypedCommand<TRequest> parses requestJson into TRequest
-// once, here, so every command implementation is written against a typed
-// request and never touches glz::read directly.
-template <typename TRequest>
-class TypedCommand : public Command {
-public:
-    asio::awaitable<CommandOutcome> Execute(std::string requestJson) final {
+    asio::awaitable<std::string> Execute(std::string requestJson) final {
         TRequest request;
         // error_on_unknown_keys=false: requestJson may legitimately carry
-        // fields this command doesn't declare (e.g. request_id is on every
-        // request but plenty of commands never need to read it back out),
-        // and Glaze's default stops parsing at the first such field --
-        // see the CommandRegistry::Dispatch bug this exact policy fixed.
-        if (glz::read<glz::opts{.error_on_unknown_keys = false}>(request, requestJson)) {
-            co_return CommandOutcome{.Success = false, .ErrorCode = "invalid_request"};
+        // fields this command doesn't declare, and Glaze's default stops
+        // parsing at the first such field -- see the CommandRegistry bug
+        // this exact policy fixed.
+        const bool parseFailed = bool(glz::read<glz::opts{.error_on_unknown_keys = false}>(request, requestJson));
+
+        std::string resultJson;
+        if (parseFailed) {
+            TResult errorResult{};
+            errorResult.RequestId = request.RequestId;  // may still be set even if some other field failed to parse
+            errorResult.Success = false;
+            errorResult.ErrorCode = "invalid_request";
+            (void)glz::write_json(errorResult, resultJson);
+            co_return resultJson;
         }
-        co_return co_await ExecuteTyped(std::move(request));
+
+        TResult result = co_await ExecuteTyped(request);
+        result.RequestId = request.RequestId;
+        (void)glz::write_json(result, resultJson);
+        co_return resultJson;
     }
 
 protected:
-    virtual asio::awaitable<CommandOutcome> ExecuteTyped(TRequest request) = 0;
+    virtual asio::awaitable<TResult> ExecuteTyped(TRequest request) = 0;
 };
 
-using CommandFactory = std::function<std::unique_ptr<Command>()>;
+using CommandFactory = std::function<std::unique_ptr<ICommand>()>;
 
 // Runtime lookup table standing in for reflection (see "동적 커맨드 생성" in the
 // architecture skill -- C++ has no runtime reflection usable across
@@ -72,12 +80,11 @@ public:
     static CommandRegistry& Instance();
 
     void Register(std::string_view commandId, CommandFactory factory);
-    [[nodiscard]] std::unique_ptr<Command> Create(std::string_view commandId) const;
+    [[nodiscard]] std::unique_ptr<ICommand> Create(std::string_view commandId) const;
 
-    // Runs the command and returns the full, ready-to-send webzen::Result
-    // JSON (RequestId echoed from requestJson, Success/ErrorCode/
-    // ErrorMessage/Data filled from the command's CommandOutcome). This is
-    // the one place RequestId correlation happens -- see request.hpp.
+    // Runs the command and returns its Result JSON as-is; for the
+    // unknown-command/exception cases (no command to have produced one)
+    // builds a plain Result JSON itself, still echoing RequestId.
     asio::awaitable<std::string> Dispatch(std::string commandId, std::string requestJson) const;
 
 private:

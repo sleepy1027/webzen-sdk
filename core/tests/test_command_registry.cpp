@@ -14,10 +14,30 @@
 
 namespace {
 
-class EchoCommand : public webzen::Command {
-public:
-    asio::awaitable<webzen::CommandOutcome> Execute(std::string requestJson) override {
-        co_return webzen::CommandOutcome{.Success = true, .Data = std::move(requestJson)};
+struct RequestEcho {
+    std::string RequestId;
+    std::string Message;
+};
+
+struct ResultEcho {
+    std::string RequestId;
+    bool Success = false;
+    std::string ErrorCode;
+    std::string ErrorMessage;
+    std::string Message;
+};
+
+}  // namespace
+
+WEBZEN_JSON(RequestEcho);
+WEBZEN_JSON(ResultEcho);
+
+namespace {
+
+class EchoCommand : public webzen::Command<RequestEcho, ResultEcho> {
+protected:
+    asio::awaitable<ResultEcho> ExecuteTyped(RequestEcho request) override {
+        co_return ResultEcho{.Success = true, .Message = std::move(request.Message)};
     }
 };
 
@@ -28,6 +48,12 @@ REGISTER_COMMAND("test.echo", EchoCommand)
 namespace {
 webzen::Result ParseResult(const std::string& json) {
     webzen::Result result;
+    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(result, json));
+    return result;
+}
+
+ResultEcho ParseEchoResult(const std::string& json) {
+    ResultEcho result;
     REQUIRE_FALSE(glz::read_json(result, json));
     return result;
 }
@@ -36,13 +62,14 @@ webzen::Result ParseResult(const std::string& json) {
 TEST_CASE("CommandRegistry dispatches a registered command", "[command_registry]") {
     asio::io_context io;
     auto future = asio::co_spawn(
-        io, webzen::CommandRegistry::Instance().Dispatch("test.echo", R"({"request_id":"r1","hello":"world"})"), asio::use_future);
+        io, webzen::CommandRegistry::Instance().Dispatch("test.echo", R"({"request_id":"r1","message":"hello"})"),
+        asio::use_future);
     io.run();
 
-    const auto result = ParseResult(future.get());
+    const auto result = ParseEchoResult(future.get());
     CHECK(result.Success);
     CHECK(result.RequestId == "r1");
-    CHECK(result.Data == R"({"request_id":"r1","hello":"world"})");
+    CHECK(result.Message == "hello");
 }
 
 TEST_CASE("CommandRegistry.Dispatch reads request_id even when other fields come first in the JSON", "[command_registry]") {
@@ -55,11 +82,11 @@ TEST_CASE("CommandRegistry.Dispatch reads request_id even when other fields come
     asio::io_context io;
     auto future = asio::co_spawn(
         io,
-        webzen::CommandRegistry::Instance().Dispatch("test.echo", R"({"hello":"world","request_id":"r3"})"),
+        webzen::CommandRegistry::Instance().Dispatch("test.echo", R"({"message":"hello","request_id":"r3"})"),
         asio::use_future);
     io.run();
 
-    const auto result = ParseResult(future.get());
+    const auto result = ParseEchoResult(future.get());
     CHECK(result.RequestId == "r3");
 }
 
@@ -94,7 +121,7 @@ TEST_CASE("CommandRegistry.Dispatch does not dangle when the id/json strings are
     auto future = DispatchLikeSdkDoes(io, commandId, requestJson);
     io.run();
 
-    const auto result = ParseResult(future.get());
+    const auto result = ParseEchoResult(future.get());
     CHECK(result.Success);
     CHECK(result.RequestId == "r2");
 }

@@ -12,9 +12,9 @@
 #include "core/sdk_c_api.h"
 #endif
 
-TMap<FString, FWebzenResultDelegate>& UWebzenSDKSubsystem::Pending()
+TMap<FString, TFunction<void(const FString&)>>& UWebzenSDKSubsystem::Pending()
 {
-	static TMap<FString, FWebzenResultDelegate> Map;
+	static TMap<FString, TFunction<void(const FString&)>> Map;
 	return Map;
 }
 
@@ -71,37 +71,37 @@ namespace
 		return Out;
 	}
 
+	FString ExtractRequestId(const FString& Json)
+	{
+		TSharedPtr<FJsonObject> Parsed;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+		FString RequestId;
+		if (FJsonSerializer::Deserialize(Reader, Parsed) && Parsed.IsValid())
+		{
+			Parsed->TryGetStringField(TEXT("request_id"), RequestId);
+		}
+		return RequestId;
+	}
+
 	void HandleDispatchResult(const char* ResultJson)
 	{
 		const FString Payload = UTF8_TO_TCHAR(ResultJson);
-
-		FWebzenResult Result;
-		TSharedPtr<FJsonObject> Json;
-		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Payload);
-		if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
-		{
-			Json->TryGetStringField(TEXT("request_id"), Result.RequestId);
-			Json->TryGetBoolField(TEXT("success"), Result.bSuccess);
-			Json->TryGetStringField(TEXT("error_code"), Result.ErrorCode);
-			Json->TryGetStringField(TEXT("error_message"), Result.ErrorMessage);
-			Json->TryGetStringField(TEXT("data"), Result.Data);
-		}
-
-		if (Result.RequestId.IsEmpty())
+		const FString RequestId = ExtractRequestId(Payload);
+		if (RequestId.IsEmpty())
 		{
 			return;
 		}
 
-		// Correlates back to the right delegate via Result.RequestId
-		// instead of a native user_data, exactly like the Unity bridge
-		// (WebzenSDK.cs) -- see core/request.hpp.
-		FWebzenResultDelegate OnComplete;
+		// Correlates back to the right handler via RequestId instead of a
+		// native user_data, exactly like the Unity bridge (WebzenSDK.cs) --
+		// see core/request.hpp.
+		TFunction<void(const FString&)> Handler;
 		{
 			FScopeLock Lock(&UWebzenSDKSubsystem::PendingLock());
-			if (FWebzenResultDelegate* Found = UWebzenSDKSubsystem::Pending().Find(Result.RequestId))
+			if (TFunction<void(const FString&)>* Found = UWebzenSDKSubsystem::Pending().Find(RequestId))
 			{
-				OnComplete = *Found;
-				UWebzenSDKSubsystem::Pending().Remove(Result.RequestId);
+				Handler = *Found;
+				UWebzenSDKSubsystem::Pending().Remove(RequestId);
 			}
 			else
 			{
@@ -111,31 +111,22 @@ namespace
 
 		// Fires on the SDK's own worker thread; delegates/UObjects must
 		// only be touched on the game thread.
-		AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]() { OnComplete.Broadcast(Result); });
+		AsyncTask(ENamedThreads::GameThread, [Handler, Payload]() { Handler(Payload); });
 	}
 }
 
-void UWebzenSDKSubsystem::Dispatch(const FString& CommandId, const FString& RequestJson, const FWebzenResultDelegate& OnComplete)
+void UWebzenSDKSubsystem::DispatchRaw(const FString& CommandId, const FString& RequestJson, TFunction<void(const FString&)> OnRawResult)
 {
-	FString RequestId;
-	{
-		TSharedPtr<FJsonObject> Json;
-		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(RequestJson);
-		if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
-		{
-			Json->TryGetStringField(TEXT("request_id"), RequestId);
-		}
-	}
-
+	const FString RequestId = ExtractRequestId(RequestJson);
 	if (RequestId.IsEmpty())
 	{
-		OnComplete.ExecuteIfBound(FWebzenResult{.ErrorCode = TEXT("invalid_request"), .ErrorMessage = TEXT("missing request_id")});
+		OnRawResult(TEXT(R"({"success":false,"error_code":"invalid_request","error_message":"missing request_id"})"));
 		return;
 	}
 
 	{
 		FScopeLock Lock(&PendingLock());
-		Pending().Add(RequestId, OnComplete);
+		Pending().Add(RequestId, OnRawResult);
 	}
 
 	const DispatchCommandFn Fn = ResolveDispatchCommand();
@@ -143,7 +134,7 @@ void UWebzenSDKSubsystem::Dispatch(const FString& CommandId, const FString& Requ
 	{
 		FScopeLock Lock(&PendingLock());
 		Pending().Remove(RequestId);
-		OnComplete.ExecuteIfBound(FWebzenResult{.RequestId = RequestId, .ErrorCode = TEXT("native_library_unavailable")});
+		OnRawResult(FString::Printf(TEXT(R"({"request_id":"%s","success":false,"error_code":"native_library_unavailable"})"), *RequestId));
 		return;
 	}
 
@@ -155,15 +146,45 @@ void UWebzenSDKSubsystem::Initialize(const FRequestInitialize& Request, const FW
 	const FString Json = BuildRequestJson([&](const TSharedRef<FJsonObject>& Obj) {
 		Obj->SetStringField(TEXT("base_url"), Request.BaseUrl);
 	});
-	Dispatch(TEXT("core.initialize"), Json, OnComplete);
+
+	DispatchRaw(TEXT("core.initialize"), Json, [OnComplete](const FString& ResultJson) {
+		FWebzenResult Result;
+		TSharedPtr<FJsonObject> Json;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResultJson);
+		if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
+		{
+			Json->TryGetStringField(TEXT("request_id"), Result.RequestId);
+			Json->TryGetBoolField(TEXT("success"), Result.bSuccess);
+			Json->TryGetStringField(TEXT("error_code"), Result.ErrorCode);
+			Json->TryGetStringField(TEXT("error_message"), Result.ErrorMessage);
+		}
+		OnComplete.ExecuteIfBound(Result);
+	});
 }
 
-void UWebzenSDKSubsystem::Login(const FRequestLogin& Request, const FWebzenResultDelegate& OnComplete)
+void UWebzenSDKSubsystem::Login(const FRequestLogin& Request, const FWebzenLoginResultDelegate& OnComplete)
 {
 	const FString Json = BuildRequestJson([&](const TSharedRef<FJsonObject>& Obj) {
 		Obj->SetStringField(TEXT("provider_id"), Request.ProviderId);
 		Obj->SetStringField(TEXT("provider_token"), Request.ProviderToken);
 		Obj->SetStringField(TEXT("device_id"), Request.DeviceId);
 	});
-	Dispatch(TEXT("auth.login"), Json, OnComplete);
+
+	DispatchRaw(TEXT("auth.login"), Json, [OnComplete](const FString& ResultJson) {
+		FResultLogin Result;
+		TSharedPtr<FJsonObject> Json;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResultJson);
+		if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
+		{
+			Json->TryGetStringField(TEXT("request_id"), Result.RequestId);
+			Json->TryGetBoolField(TEXT("success"), Result.bSuccess);
+			Json->TryGetStringField(TEXT("error_code"), Result.ErrorCode);
+			Json->TryGetStringField(TEXT("error_message"), Result.ErrorMessage);
+			Json->TryGetStringField(TEXT("user_id"), Result.UserId);
+			Json->TryGetStringField(TEXT("access_token"), Result.AccessToken);
+			Json->TryGetStringField(TEXT("refresh_token"), Result.RefreshToken);
+			Json->TryGetNumberField(TEXT("expires_at"), Result.ExpiresAt);
+		}
+		OnComplete.ExecuteIfBound(Result);
+	});
 }

@@ -127,11 +127,15 @@ WebView, Push, Crash, MMP) out of the legacy per-OS libraries:
    and rename), linking `webzen::core` and aliased as `webzen::<module>`.
    `add_subdirectory(<module>)` in the root `CMakeLists.txt`.
 3. A plain `Request<Feature>` struct (own `RequestId` field, no inheritance
-   — see the architecture skill's JSON section for why) with
-   `glz::meta<Request<Feature>> : glz::snake_case {}`, and a `Command`
-   implementation deriving `TypedCommand<Request<Feature>>`
-   (`core/command_registry.hpp`) registered with
-   `REGISTER_COMMAND("<module>.<action>", ...)`.
+   — see the architecture skill's JSON section for why) declared with
+   `WEBZEN_JSON(Request<Feature>);`, and a command implementation deriving
+   `Command<Request<Feature>>` (`core/command_registry.hpp`; that name is
+   the template most commands use — the plain, non-template `ICommand` is
+   only for CommandRegistry's own type erasure) registered with
+   `REGISTER_COMMAND("<module>.<action>", ...)`. Give `Command<>` a second,
+   richer `Result<Feature>` type argument only if the command needs to
+   return more than plain success/failure (see `auth::ResultLogin`) — most
+   won't.
 4. Link the new module into **every** platform artifact that ships it
    (`platform/android/CMakeLists.txt`, `platform/ios/CMakeLists.txt`,
    `platform/windows/CMakeLists.txt` each need `webzen::<module>` added to

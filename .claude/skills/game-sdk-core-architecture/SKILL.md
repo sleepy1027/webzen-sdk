@@ -62,7 +62,7 @@ C ABI(`core/sdk_c_api.h`)는 함수 하나만 노출한다: `Webzen_DispatchComm
 
 콜백에는 `user_data`를 넘기지 않는다. 모든 요청 타입은 `RequestId` 필드를 직접 선언한다 (상속으로 공유하지 않는다 — 아래 JSON 절 참고). `CommandRegistry::Dispatch`가 `webzen::Request`(`core/request.hpp`, `RequestId` 하나만 있는 독립 구조체)로 들어온 JSON을 부분 파싱해 `RequestId`만 뽑아내고, 커맨드 실행 결과(`webzen::Result`)에 그대로 echo해준다 — 도메인 커맨드 코드는 이걸 신경 쓸 필요가 없다. 언어별 바인딩(Kotlin/Obj-C/C#/Unreal C++)은 정적 콜백 트램폴린 하나만 등록하고, `RequestId → 콜백` 맵으로 상관관계를 처리한다. 이렇게 하면 콜백 컨텍스트를 JNI GlobalRef나 Obj-C 블록, C# GCHandle 같은 걸로 FFI 경계 너머까지 들고 다닐 필요가 없다.
 
-콜백이 받는 결과 타입은 항상 하나, `webzen::Result`다 (`RequestId`, `Success`, `ErrorCode`, `ErrorMessage`, 그리고 도메인별 페이로드가 이미 직렬화된 JSON 문자열인 `Data`). 도메인마다 다른 콜백 타입을 만들지 않는다.
+콜백이 받는 결과는 항상 같은 모양의 최소 4개 필드(`RequestId`, `Success`, `ErrorCode`, `ErrorMessage`)로 시작한다 (`webzen::Result`). 성공/실패만 보고하면 되는 커맨드는 이 `Result`를 그대로 쓰고, 더 돌려줄 게 있는 커맨드는 같은 4개 필드에 도메인 필드를 추가한 `ResultXXX`(예: `auth::ResultLogin`)를 정의해서 쓴다 — 모든 도메인 데이터를 문자열 하나에 다시 직렬화해 넣는 범용 필드는 두지 않는다. 자세한 내용과 이유는 아래 JSON/커맨드 절 참고.
 
 ### 엔진 브릿지: Unity/Unreal 모두 OS별 브릿지 클래스가 없다
 
@@ -107,8 +107,9 @@ struct glz::meta<AuthTokenDto> : glz::snake_case {};
 ```
 
   멤버 이름 그대로 자동으로 리플렉션되고 snake_case로 변환되므로, 멤버를 추가/삭제해도 `glz::meta` 쪽엔 손댈 게 없다. (예전엔 `SDK_FIELD(T, Member)`를 멤버마다 손으로 나열하는 자체 매크로를 썼는데, Glaze가 이미 이 기능을 내장하고 있어서 걷어냈다 — 자체 구현판은 멤버 하나 추가할 때마다 별도로 등록해줘야 했고, 그걸 잊어도 컴파일 에러가 안 나는 게 문제였다.)
-* **DTO에 상속을 쓰지 않는다.** Glaze v8.0.0의 자동 리플렉션은 베이스 클래스가 있는 타입에서 컴파일 에러를 낸다 (직접 확인함 — 이후 버전에서 고쳐질 수도 있지만 지금은 그렇다). `RequestLogin`, `RequestInitialize`처럼 공통 필드(`RequestId`)가 필요한 타입들은 각자 그 필드를 직접 선언한다 (한 줄 중복). 여러 Request 타입에 걸쳐 공통으로 동작해야 하는 로직(파싱, 디스패치)은 대신 템플릿으로 처리한다 — `core/command_registry.hpp`의 `TypedCommand<TRequest>` 참고. 커맨드를 새로 만들 땐 `Command`를 직접 상속하지 말고 `TypedCommand<TRequest>`를 상속해서 `ExecuteTyped(TRequest)`만 구현한다; JSON 파싱과 에러 처리는 템플릿이 대신 해준다.
-* `glz::read`/`glz::read_json` 기본 옵션(`error_on_unknown_keys = true`)은 모르는 키를 만나면 그 자리에서 파싱을 멈춘다 — 그 뒤에 나오는, 그 타입이 원래 알고 있는 필드조차 못 읽는다. 그래서 요청 JSON을 읽는 곳은 전부 `glz::read<glz::opts{.error_on_unknown_keys = false}>`를 명시적으로 쓴다 (`TypedCommand::Execute`, `CommandRegistry::Dispatch`가 이미 그렇게 함). 이 프로젝트에서 한 번 실제로 이 순서 의존성 때문에 `RequestId` correlation이 조용히 깨지는 버그가 났었다 — `glz::read_json`(기본 옵션) 쓰지 않는다.
+* **DTO에 상속을 쓰지 않는다.** Glaze v8.0.0의 자동 리플렉션은 베이스 클래스가 있는 타입에서 컴파일 에러를 낸다 (직접 확인함 — 이후 버전에서 고쳐질 수도 있지만 지금은 그렇다). `RequestLogin`, `RequestInitialize`, `ResultLogin`처럼 공통 필드(`Request`는 `RequestId`, `Result`는 `RequestId`/`Success`/`ErrorCode`/`ErrorMessage`)가 필요한 타입들은 각자 그 필드를 직접 선언한다 (몇 줄 중복). 반복되는 `glz::meta<T> : glz::snake_case {}` 선언은 `WEBZEN_JSON(T)` 매크로로 줄여 쓴다 (`core/request.hpp`) — `static_assert`처럼 세미콜론을 직접 붙여 호출: `WEBZEN_JSON(webzen::auth::RequestLogin);`.
+* 여러 Request/Result 타입에 걸쳐 공통으로 동작해야 하는 로직(JSON 파싱, RequestId 스탬핑, 에러 처리)은 상속 대신 템플릿이 맡는다 — `core/command_registry.hpp`의 `Command<TRequest, TResult = Result>` 참고. 커맨드를 새로 만들 땐 이 템플릿을 상속해서 `ExecuteTyped(TRequest) -> awaitable<TResult>`만 구현한다 (raw 인터페이스 `ICommand`는 `CommandRegistry`가 타입 소거해서 저장하는 용도일 뿐, 직접 상속할 일은 거의 없다). `TResult`는 기본값이 그냥 `Result`(성공/실패만 있으면 되는 커맨드용)고, 커맨드가 돌려줄 게 더 있으면 `ResultLogin`처럼 같은 4개 공통 필드 + 도메인 필드를 가진 타입을 만들어서 두 번째 템플릿 인자로 넘긴다. `Result`에 모든 도메인 데이터를 문자열로 밀어넣는 범용 `Data` 필드 같은 건 두지 않는다 — 커맨드마다 결과 모양이 다르면 그 커맨드의 `ResultXXX` 타입 자체가 그 모양이어야 한다.
+* `glz::read`/`glz::read_json` 기본 옵션(`error_on_unknown_keys = true`)은 모르는 키를 만나면 그 자리에서 파싱을 멈춘다 — 그 뒤에 나오는, 그 타입이 원래 알고 있는 필드조차 못 읽는다. 그래서 JSON을 읽는 곳(요청이든 서버 응답이든)은 전부 `glz::read<glz::opts{.error_on_unknown_keys = false}>`를 명시적으로 쓴다 (`Command::Execute`, `CommandRegistry::Dispatch`가 이미 그렇게 함). 이 프로젝트에서 한 번 실제로 이 순서 의존성 때문에 `RequestId` correlation이 조용히 깨지는 버그가 났었다 — `glz::read_json`(기본 옵션) 쓰지 않는다.
 
 ### 비동기 처리 (async/await 대체)
 
@@ -122,14 +123,14 @@ struct glz::meta<AuthTokenDto> : glz::snake_case {};
 * 대신 self-registering factory 패턴을 쓴다: 각 커맨드 클래스가 정적 초기화 시점에 매크로로 자기 자신을 레지스트리(`map<string/ID, factory_fn>`)에 등록하고, 런타임엔 문자열/ID로 그 맵에서 찾아 인스턴스를 만든다.
 
 ```cpp
-class LoginCommand : public TypedCommand<RequestLogin> {
+class LoginCommand : public Command<RequestLogin, ResultLogin> {
 protected:
-    asio::awaitable<CommandOutcome> ExecuteTyped(RequestLogin request) override { /* ... */ }
+    asio::awaitable<ResultLogin> ExecuteTyped(RequestLogin request) override { /* ... */ }
 };
 REGISTER_COMMAND("auth.login", LoginCommand);
 ```
 
-이 패턴은 Unreal 자체의 `UCLASS`/`UPROPERTY` + UHT(코드생성) 방식과 개념적으로 같으니, 팀에 이미 익숙한 사고방식이라고 보면 된다. 새 커맨드를 추가할 때 이 매크로를 빠뜨리지 않는다. `Command`를 직접 상속하지 않고 `TypedCommand<TRequest>`를 상속하는 이유는 JSON 절 참고 — Request 타입들이 서로 상속 관계가 아니라서, "타입별로 파싱해서 호출"을 공유하는 역할을 상속 대신 템플릿이 맡는다.
+이 패턴은 Unreal 자체의 `UCLASS`/`UPROPERTY` + UHT(코드생성) 방식과 개념적으로 같으니, 팀에 이미 익숙한 사고방식이라고 보면 된다. 새 커맨드를 추가할 때 이 매크로를 빠뜨리지 않는다. 위 `Command<RequestLogin, ResultLogin>`이 바로 그 "타입별로 파싱해서 호출"을 공유하는 템플릿이다 — JSON 절 참고.
 
 ## 코드를 작성할 때 판단 순서
 

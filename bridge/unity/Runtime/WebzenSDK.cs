@@ -8,7 +8,7 @@ namespace Webzen
 {
     // JsonUtility has no [JsonProperty]-style renaming, so field names here
     // are the literal snake_case JSON keys the native side (core/request.hpp,
-    // SDK_FIELD) expects -- deliberately not idiomatic C# naming, to avoid
+    // WEBZEN_JSON) expects -- deliberately not idiomatic C# naming, to avoid
     // pulling in Newtonsoft just for key renaming.
     [Serializable]
     public abstract class Request
@@ -36,17 +36,26 @@ namespace Webzen
         internal override string CommandId => "auth.login";
     }
 
-    // The one shape every Dispatch callback receives, whatever the command
-    // (core/request.hpp's webzen::Result, mirrored field for field). Parse
-    // `data` yourself once you know which request you sent.
+    // The four fields every command's result starts with (core/request.hpp's
+    // webzen::Result). A command with nothing more to report uses this
+    // directly; one that returns more (e.g. auth.login) has its own
+    // ResultXXX with these same four fields plus its own -- see ResultLogin.
     [Serializable]
-    public sealed class Result
+    public class Result
     {
         public string request_id;
         public bool success;
         public string error_code;
         public string error_message;
-        public string data;
+    }
+
+    [Serializable]
+    public sealed class ResultLogin : Result
+    {
+        public string user_id;
+        public string access_token;
+        public string refresh_token;
+        public long expires_at;
     }
 
     /// <summary>
@@ -80,15 +89,21 @@ namespace Webzen
         // (echoed from Request.request_id by the native side) instead of a
         // per-call native user_data -- see core/request.hpp. One static
         // trampoline is registered for every call; the dictionary does the
-        // per-call routing on the managed side instead.
+        // per-call routing (and, since each pending call may expect a
+        // different TResult, the actual JSON -> TResult parsing) on the
+        // managed side instead.
         private static readonly object Gate = new();
-        private static readonly Dictionary<string, Action<Result>> PendingCallbacks = new();
+        private static readonly Dictionary<string, Action<string>> PendingCallbacks = new();
         private static readonly ResultCallback Trampoline = OnResult;
 
-        public static void Dispatch(Request request, Action<Result> callback)
+        // TResult : Result, so every command's result can be deserialized
+        // through this one method -- pass Result itself for a command with
+        // nothing more to report (e.g. RequestInitialize), or a richer type
+        // like ResultLogin for one that returns more.
+        public static void Dispatch<TResult>(Request request, Action<TResult> callback) where TResult : Result
         {
             lock (Gate) {
-                PendingCallbacks[request.request_id] = callback;
+                PendingCallbacks[request.request_id] = json => callback(JsonUtility.FromJson<TResult>(json));
             }
             Webzen_DispatchCommand(request.CommandId, JsonUtility.ToJson(request), Trampoline);
         }
@@ -98,29 +113,32 @@ namespace Webzen
         [MonoPInvokeCallback(typeof(ResultCallback))]
         private static void OnResult(string resultJson)
         {
-            Result result;
+            // Parsed only for request_id here -- JsonUtility silently
+            // ignores JSON fields a type doesn't declare, so reading the
+            // base Result shape out of a richer ResultXXX payload is safe.
+            Result envelope;
             try {
-                result = JsonUtility.FromJson<Result>(resultJson);
+                envelope = JsonUtility.FromJson<Result>(resultJson);
             } catch (Exception) {
                 return;
             }
 
-            if (result == null || string.IsNullOrEmpty(result.request_id)) {
+            if (envelope == null || string.IsNullOrEmpty(envelope.request_id)) {
                 return;
             }
 
-            Action<Result> callback;
+            Action<string> handler;
             lock (Gate) {
-                if (!PendingCallbacks.TryGetValue(result.request_id, out callback)) {
+                if (!PendingCallbacks.TryGetValue(envelope.request_id, out handler)) {
                     return;
                 }
-                PendingCallbacks.Remove(result.request_id);
+                PendingCallbacks.Remove(envelope.request_id);
             }
 
             // Fires on the SDK's own worker thread, not Unity's main thread;
             // the caller is responsible for hopping back to the main thread
             // before touching Unity APIs.
-            callback?.Invoke(result);
+            handler?.Invoke(resultJson);
         }
     }
 }

@@ -18,7 +18,11 @@ public class WebzenSDK : ModuleRules
 
 		if (Target.Platform == UnrealTargetPlatform.Android)
 		{
-			PrivateDependencyModuleNames.Add("Launch"); // FJavaWrapper / AndroidJNI live here
+			// No build-time link against libwebzen_core.so: it's bundled
+			// inside WebzenSDK.aar (embedded below via UPL) rather than a
+			// plain per-ABI .so UBT can add a library dependency on, so
+			// WebzenSDKSubsystem.cpp resolves its symbols at runtime with
+			// dlopen/dlsym (plain libc, no extra module needed for that).
 
 			// Embeds WebzenSDK.aar (and applies its own AndroidManifest.xml
 			// merge, permissions, etc.) into the packaged APK/AAB.

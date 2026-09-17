@@ -30,10 +30,12 @@ mkdir -p "$STAGE"
 # xcframework wants at most one library per platform+environment.
 lipo -create "$SIM_ARM64_LIB" "$SIM_X86_64_LIB" -output "$STAGE/libwebzen_core_simulator.a"
 
-HEADERS_DIR="$STAGE/headers"
+# Only the flat C ABI is public; everything else in core/ and auth/ is a
+# C++ implementation detail Unity/Unreal never include directly (see
+# core/sdk_c_api.h).
+HEADERS_DIR="$STAGE/headers/core"
 mkdir -p "$HEADERS_DIR"
-cp -R "$ROOT_DIR/core/include/webzen" "$HEADERS_DIR/"
-cp "$ROOT_DIR/platform/ios/adapter/include/WebzenIOSSDK.h" "$HEADERS_DIR/"
+cp "$ROOT_DIR/core/sdk_c_api.h" "$ROOT_DIR/core/export.h" "$HEADERS_DIR/"
 
 XCFRAMEWORK_OUT="$ROOT_DIR/build/WebzenSDK.xcframework"
 rm -rf "$XCFRAMEWORK_OUT"
@@ -50,10 +52,12 @@ done
 
 # Same public C headers as scripts/build_windows.ps1 stages -- the Unreal
 # plugin ships standalone once copied into a separate project, so it can't
-# reach back into this repo's core/include.
-UNREAL_INCLUDE_DEST="$ROOT_DIR/bridge/unreal/ThirdParty/WebzenCore/include/webzen"
+# reach back into this repo's core/ directory. Kept at include/core/... so
+# WebzenSDKSubsystem.cpp's #include "core/sdk_c_api.h" resolves the same way
+# it does inside this repo.
+UNREAL_INCLUDE_DEST="$ROOT_DIR/bridge/unreal/ThirdParty/WebzenCore/include/core"
 mkdir -p "$UNREAL_INCLUDE_DEST"
-cp "$ROOT_DIR/core/include/webzen/sdk_c_api.h" "$ROOT_DIR/core/include/webzen/export.h" "$UNREAL_INCLUDE_DEST/"
+cp "$ROOT_DIR/core/sdk_c_api.h" "$ROOT_DIR/core/export.h" "$UNREAL_INCLUDE_DEST/"
 
 echo "iOS xcframework staged:"
 echo "  $ROOT_DIR/bridge/unity/Plugins/iOS/WebzenSDK.xcframework"

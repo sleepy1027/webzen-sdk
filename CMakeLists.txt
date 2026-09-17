@@ -20,10 +20,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 option(WEBZEN_BUILD_TESTS "Build the core unit test suite" ON)
 option(WEBZEN_BUILD_PLATFORM "Build the current platform's adapter + wrapped artifact (.so/.framework/.dll)" ON)
 
-# Common business logic. Never platform-specific: see
-# .claude/skills/game-sdk-core-architecture/SKILL.md before adding anything
-# here that only makes sense on one OS.
+# Common business logic, one directory per feature module (core is generic
+# plumbing; auth is the first migrated domain; billing/web/push/analytics/
+# crashreport join this list as they migrate in). Never platform-specific:
+# see .claude/skills/game-sdk-core-architecture/SKILL.md before adding
+# anything here that only makes sense on one OS.
 add_subdirectory(core)
+add_subdirectory(auth)
 
 if(WEBZEN_BUILD_PLATFORM)
     if(ANDROID)
@@ -42,5 +45,5 @@ endif()
 
 if(WEBZEN_BUILD_TESTS AND NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     enable_testing()
-    add_subdirectory(core/tests)
+    add_subdirectory(tests)
 endif()

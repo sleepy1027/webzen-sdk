@@ -13,10 +13,19 @@ import android.net.Uri
  * Activity, which is the standard trick SDKs (e.g. Firebase, WorkManager)
  * use for this. Declared in AndroidManifest.xml; never referenced directly
  * by app code.
+ *
+ * Also loads libwebzen_core.so. Nothing else does: there is no public
+ * Kotlin facade any more (see jni_bridge.cpp) for the engine bridges to
+ * call, which previously triggered the load as a side effect of their own
+ * `init` block. Unity's [DllImport] and Unreal's dlopen/dlsym both need the
+ * library already resident in the process by the time they run, and both
+ * can run before any Activity exists, so this -- which also runs before any
+ * Activity -- is the one place left that's early enough.
  */
 class WebzenContextProvider : ContentProvider() {
     override fun onCreate(): Boolean {
         context?.applicationContext?.let { appContext = it }
+        System.loadLibrary("webzen_core")
         return true
     }
 

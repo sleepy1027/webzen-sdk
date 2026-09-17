@@ -43,6 +43,36 @@ Unreal / Unity
 * OS별로 실제 달라야 하는 부분만 Adapter로 분리한다. Adapter는 "OS가 할 수 있는 모든 것"을 노출하는 게 아니라, 공통 코어가 필요로 하는 기능만 최소한의 인터페이스로 요청해서 쓰는 형태다 (예: HTTP 전송, 시스템 키체인 접근, 네이티브 벤더 SDK 호출). 필요하지 않은 기능을 미리 어댑터에 만들어두지 않는다.
 * Unreal/Unity 브릿지와 빌드스크립트는 역할이 바뀐다. 기존엔 "OS 네이티브 라이브러리와 연결"이었다면, 이제는 "미리 빌드된 공통 코어 아티팩트(정적/동적 라이브러리)를 끼워넣는" 역할이 된다. 인터페이스 자체는 최대한 그대로 유지해서 게임 개발자(SDK 사용자) 쪽 API가 깨지지 않게 한다.
 
+## 모듈 구조 & 디스패치 규약 (결정됨)
+
+### 디렉토리: 기능별 모듈, 헤더/소스 같은 폴더
+
+공통 코어는 도메인별로 최상위 디렉토리를 하나씩 둔다: `core/`(범용 배관 — 커맨드 디스패치, HTTP, JSON 네이밍, Sdk 파사드, C ABI), `auth/`, 그리고 이후 `billing/`, `web/`, `push/`, `analytics/`, `crashreport/`가 같은 패턴으로 추가된다. 각 모듈 디렉토리 안에는 헤더(`.hpp`)와 소스(`.cpp`)를 같은 폴더에 둔다 — `include/` vs `src/` 분리는 쓰지 않는다. `#include`는 리포 루트 기준 경로를 그대로 쓴다 (`#include "auth/auth_service.hpp"`, `#include "core/sdk.hpp"`) — 이 include 경로가 모듈 디렉토리와 정확히 일치하므로, 새 모듈을 어디에 둬야 하는지 헷갈릴 일이 없다.
+
+각 모듈은 CMake `OBJECT` 라이브러리로 빌드하고 `webzen::<module>` 별칭을 붙인다 (`auth/CMakeLists.txt` 참고). `STATIC`이 아니라 `OBJECT`인 이유: self-registering factory 패턴(아래 "동적 커맨드 생성") 때문에 최종 플랫폼 아티팩트(Android `.so`, Windows `.dll`, iOS `.xcframework`용 `.a`)가 모든 `REGISTER_COMMAND` 번역 단위를 무조건 포함해야 하는데, 일반 `STATIC` 아카이브는 링커가 "참조되지 않는" 객체 파일을 조용히 빼버릴 수 있다. `OBJECT` 라이브러리를 `target_link_libraries()`로 직접 링크하면 CMake가 객체 파일 전체를 항상 포함시킨다. 단, iOS는 예외다 — 최종적으로 게임 쪽 Xcode 프로젝트가 우리가 만든 `.a`를 또 하나의 서드파티 정적 라이브러리로 취급해 같은 문제가 재발하므로, 그쪽에서 `-force_load`로 링크하는 게 필수다 (`docs/BUILDING.md` 참고).
+
+새 기능 모듈을 이관할 때 반드시 할 일:
+1. `<module>/` 디렉토리 + `CMakeLists.txt`(OBJECT 라이브러리, `webzen::core` 링크) + 루트 `CMakeLists.txt`에 `add_subdirectory(<module>)`.
+2. `platform/android`, `platform/ios`, `platform/windows` 각각의 `CMakeLists.txt`에 새 `webzen::<module>`을 `target_link_libraries()`로 추가한다 — 이걸 빠뜨리면 코드는 컴파일되지만 실제로 출하되는 아티팩트엔 포함되지 않아 조용히 동작하지 않는다.
+3. `<module>/tests/`에 테스트를 두면 `tests/CMakeLists.txt`의 glob이 자동으로 주워간다.
+
+### 네이티브 엔트리 포인트: DispatchCommand 하나로 통일
+
+C ABI(`core/sdk_c_api.h`)는 함수 하나만 노출한다: `Webzen_DispatchCommand(command_id, request_json, callback)`. `Webzen_Initialize(base_url)` 같은 별도의 라이프사이클 진입점을 두지 않는다 — SDK 초기화조차 `"core.initialize"`라는 커맨드로 다룬다 (`core/initialize_command.hpp`). `Sdk`는 첫 `DispatchCommand` 호출 시 내부적으로 io_context 스레드를 lazy하게 시작한다. 새 기능이 "매번 호출 전에 별도로 초기화해야 하는" 진입점을 만들고 싶어지면, 그 대신 커맨드로 표현할 방법을 먼저 찾는다.
+
+콜백에는 `user_data`를 넘기지 않는다. 모든 요청은 `webzen::Request`(`core/request.hpp`)를 상속하고 `RequestId` 필드를 갖는다. `CommandRegistry::Dispatch`가 들어온 JSON에서 `RequestId`만 파싱해 커맨드 실행 결과(`webzen::Result`)에 그대로 echo해준다 — 도메인 커맨드 코드는 이걸 신경 쓸 필요가 없다. 언어별 바인딩(Kotlin/Obj-C/C#/Unreal C++)은 정적 콜백 트램폴린 하나만 등록하고, `RequestId → 콜백` 맵으로 상관관계를 처리한다. 이렇게 하면 콜백 컨텍스트를 JNI GlobalRef나 Obj-C 블록, C# GCHandle 같은 걸로 FFI 경계 너머까지 들고 다닐 필요가 없다.
+
+콜백이 받는 결과 타입은 항상 하나, `webzen::Result`다 (`RequestId`, `Success`, `ErrorCode`, `ErrorMessage`, 그리고 도메인별 페이로드가 이미 직렬화된 JSON 문자열인 `Data`). 도메인마다 다른 콜백 타입을 만들지 않는다.
+
+### 엔진 브릿지: Unity/Unreal 모두 OS별 브릿지 클래스가 없다
+
+Android/iOS/Windows 아티팩트는 전부 동일한 C ABI(`Webzen_DispatchCommand`)를 노출한다. Android는 `.so`(`.aar` 안에 들어있음), iOS는 정적 링크, Windows는 `.dll` — 노출하는 심볼과 시그니처는 완전히 같다. 그래서 엔진 브릿지 쪽에 "OS별 구현체"를 두지 않는다:
+
+* Unity: `[DllImport("webzen_core")]` 하나로 끝난다 (iOS만 정적 링크라 라이브러리 이름이 `"__Internal"`로 다름 — 이 한 줄 차이 말고는 플랫폼 분기가 없다). `.aar`에 들어있는 `.so`라도 Unity 플레이어가 프로세스에 로드해두므로 SONAME으로 바로 찾아진다.
+* Unreal: iOS/Windows는 빌드 타임에 네이티브 아티팩트를 직접 링크해서 C API를 바로 호출한다. Android는 UBT가 AAR 내부의 `.so`를 빌드 타임에 링크하기 애매해서 런타임에 `dlopen`/`dlsym`으로 심볼을 한 번 resolve해서 쓴다 (그 시점엔 이미 로드돼 있어야 하므로, Android에서는 `WebzenContextProvider`가 `System.loadLibrary("webzen_core")`도 같이 해준다).
+
+Kotlin(`platform/android/aar`)이나 Objective-C++(`platform/ios`) 코드는 여전히 존재하지만, 그건 각 네이티브 아티팩트 **내부에서만** 쓰는 구현 디테일이다 (Keystore/Keychain처럼 Java/Obj-C로만 접근 가능한 OS API를 감싸는 용도) — 엔진 브릿지가 호출하는 공개 API가 절대 아니다. "OS별로 브릿지가 왜 필요하지?"라는 질문이 나오면, 답은 대부분 "필요 없다, C ABI를 직접 부르면 된다"이다.
+
 ## 기술 스택 (결정됨)
 
 ### 언어 / 빌드

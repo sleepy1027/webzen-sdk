@@ -23,7 +23,7 @@ if (-not $Dll -or -not $Lib) {
 
 $UnityDest = Join-Path $RootDir "bridge\unity\Plugins\x86_64"
 $UnrealDest = Join-Path $RootDir "bridge\unreal\ThirdParty\WebzenCore\Win64"
-$UnrealIncludeDest = Join-Path $RootDir "bridge\unreal\ThirdParty\WebzenCore\include\webzen"
+$UnrealIncludeDest = Join-Path $RootDir "bridge\unreal\ThirdParty\WebzenCore\include\core"
 New-Item -ItemType Directory -Force -Path $UnityDest, $UnrealDest, $UnrealIncludeDest | Out-Null
 
 Copy-Item $Dll.FullName -Destination $UnityDest -Force
@@ -31,11 +31,13 @@ Copy-Item $Dll.FullName -Destination $UnrealDest -Force
 Copy-Item $Lib.FullName -Destination $UnrealDest -Force
 
 # The plugin ships inside a separate Unreal project once copied there, so it
-# can't reach back into this repo's core/include -- it needs its own copy of
-# just the public C ABI headers.
-Copy-Item (Join-Path $RootDir "core\include\webzen\sdk_c_api.h") -Destination $UnrealIncludeDest -Force
-Copy-Item (Join-Path $RootDir "core\include\webzen\export.h") -Destination $UnrealIncludeDest -Force
+# can't reach back into this repo's core/ directory -- it needs its own copy
+# of just the public C ABI headers (kept at include/core/... so
+# WebzenSDKSubsystem.cpp's #include "core/sdk_c_api.h" resolves the same way
+# it does inside this repo).
+Copy-Item (Join-Path $RootDir "core\sdk_c_api.h") -Destination $UnrealIncludeDest -Force
+Copy-Item (Join-Path $RootDir "core\export.h") -Destination $UnrealIncludeDest -Force
 
 Write-Host "Windows DLL/LIB staged:"
 Write-Host "  $UnityDest\webzen_core.dll"
-Write-Host "  $UnrealDest\webzen_core.dll (+ .lib, + include\webzen headers)"
+Write-Host "  $UnrealDest\webzen_core.dll (+ .lib, + include\core headers)"

@@ -4,108 +4,166 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 #if PLATFORM_ANDROID
-#include "Android/AndroidApplication.h"
-#include "Android/AndroidJNI.h"
-#elif PLATFORM_IOS || PLATFORM_WINDOWS
-#include "webzen/sdk_c_api.h"
+#include <dlfcn.h>
+#else
+#include "core/sdk_c_api.h"
 #endif
+
+TMap<FString, FWebzenResultDelegate>& UWebzenSDKSubsystem::Pending()
+{
+	static TMap<FString, FWebzenResultDelegate> Map;
+	return Map;
+}
+
+FCriticalSection& UWebzenSDKSubsystem::PendingLock()
+{
+	static FCriticalSection Lock;
+	return Lock;
+}
 
 namespace
 {
-	struct FLoginCallbackContext
-	{
-		FWebzenLoginResult OnComplete;
-	};
+	using DispatchCommandFn = void (*)(const char*, const char*, WebzenResultCallback);
 
-#if PLATFORM_IOS || PLATFORM_WINDOWS
-	void HandleDispatchResult(int Success, const char* JsonPayload, void* UserData)
+#if PLATFORM_ANDROID
+	// libwebzen_core.so lives inside the AAR UBT embeds (WebzenSDK_UPL_Android.xml),
+	// not something UBT links against at build time, so its exported C
+	// symbols are resolved with dlopen/dlsym at runtime instead. It's
+	// already loaded into the process by the time any game code runs --
+	// see WebzenContextProvider.kt's onCreate -- so RTLD_NOLOAD just grabs
+	// the existing handle rather than loading a second copy; the plain
+	// dlopen fallback exists only in case that assumption ever breaks.
+	void* GetLibraryHandle()
 	{
-		auto* Context = static_cast<FLoginCallbackContext*>(UserData);
-		const FString Payload = UTF8_TO_TCHAR(JsonPayload);
-		const bool bSuccess = Success != 0;
+		static void* Handle = [] {
+			void* H = dlopen("libwebzen_core.so", RTLD_NOW | RTLD_NOLOAD);
+			return H ? H : dlopen("libwebzen_core.so", RTLD_NOW);
+		}();
+		return Handle;
+	}
 
+	DispatchCommandFn ResolveDispatchCommand()
+	{
+		static auto Fn = reinterpret_cast<DispatchCommandFn>(dlsym(GetLibraryHandle(), "Webzen_DispatchCommand"));
+		return Fn;
+	}
+#else
+	DispatchCommandFn ResolveDispatchCommand()
+	{
+		return &Webzen_DispatchCommand;
+	}
+#endif
+
+	// Generates a fresh RequestId per call -- see the comment on
+	// FWebzenRequest for why this doesn't come from the request struct.
+	FString BuildRequestJson(TFunctionRef<void(TSharedRef<FJsonObject>)> AddFields)
+	{
+		const TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+		Json->SetStringField(TEXT("request_id"), FGuid::NewGuid().ToString(EGuidFormats::Digits));
+		AddFields(Json);
+
+		FString Out;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
+		FJsonSerializer::Serialize(Json, Writer);
+		return Out;
+	}
+
+	void HandleDispatchResult(const char* ResultJson)
+	{
+		const FString Payload = UTF8_TO_TCHAR(ResultJson);
+
+		FWebzenResult Result;
 		TSharedPtr<FJsonObject> Json;
-		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Payload);
-		FJsonSerializer::Deserialize(Reader, Json);
-
-		FString UserId, AccessToken, ErrorMessage;
-		if (Json.IsValid())
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Payload);
+		if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
 		{
-			Json->TryGetStringField(TEXT("user_id"), UserId);
-			Json->TryGetStringField(TEXT("access_token"), AccessToken);
-			Json->TryGetStringField(TEXT("error"), ErrorMessage);
+			Json->TryGetStringField(TEXT("request_id"), Result.RequestId);
+			Json->TryGetBoolField(TEXT("success"), Result.bSuccess);
+			Json->TryGetStringField(TEXT("error_code"), Result.ErrorCode);
+			Json->TryGetStringField(TEXT("error_message"), Result.ErrorMessage);
+			Json->TryGetStringField(TEXT("data"), Result.Data);
 		}
 
-		// Webzen_DispatchCommand's callback fires on the SDK's own worker
-		// thread; delegates/UObjects must only be touched on the game thread.
-		FWebzenLoginResult OnComplete = Context->OnComplete;
-		AsyncTask(ENamedThreads::GameThread, [OnComplete, bSuccess, UserId, AccessToken, ErrorMessage]() {
-			OnComplete.ExecuteIfBound(bSuccess, UserId, AccessToken, ErrorMessage);
-		});
-		delete Context;
+		if (Result.RequestId.IsEmpty())
+		{
+			return;
+		}
+
+		// Correlates back to the right delegate via Result.RequestId
+		// instead of a native user_data, exactly like the Unity bridge
+		// (WebzenSDK.cs) -- see core/request.hpp.
+		FWebzenResultDelegate OnComplete;
+		{
+			FScopeLock Lock(&UWebzenSDKSubsystem::PendingLock());
+			if (FWebzenResultDelegate* Found = UWebzenSDKSubsystem::Pending().Find(Result.RequestId))
+			{
+				OnComplete = *Found;
+				UWebzenSDKSubsystem::Pending().Remove(Result.RequestId);
+			}
+			else
+			{
+				return;
+			}
+		}
+
+		// Fires on the SDK's own worker thread; delegates/UObjects must
+		// only be touched on the game thread.
+		AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]() { OnComplete.Broadcast(Result); });
 	}
-#endif
 }
 
-void UWebzenSDKSubsystem::Initialize(const FString& BaseUrl)
+void UWebzenSDKSubsystem::Dispatch(const FString& CommandId, const FString& RequestJson, const FWebzenResultDelegate& OnComplete)
 {
-#if PLATFORM_ANDROID
-	if (JNIEnv* Env = FAndroidApplication::GetJavaEnv())
+	FString RequestId;
 	{
-		jclass Class = FAndroidApplication::FindJavaClass("com/webzen/sdk/WebzenSDK");
-		jmethodID Method = Env->GetStaticMethodID(Class, "initialize", "(Ljava/lang/String;)V");
-		jstring JBaseUrl = Env->NewStringUTF(TCHAR_TO_UTF8(*BaseUrl));
-		Env->CallStaticVoidMethod(Class, Method, JBaseUrl);
-		Env->DeleteLocalRef(JBaseUrl);
-		Env->DeleteLocalRef(Class);
+		TSharedPtr<FJsonObject> Json;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(RequestJson);
+		if (FJsonSerializer::Deserialize(Reader, Json) && Json.IsValid())
+		{
+			Json->TryGetStringField(TEXT("request_id"), RequestId);
+		}
 	}
-#elif PLATFORM_IOS || PLATFORM_WINDOWS
-	Webzen_Initialize(TCHAR_TO_UTF8(*BaseUrl));
-#endif
-}
 
-void UWebzenSDKSubsystem::Login(const FString& ProviderId, const FString& ProviderToken, const FWebzenLoginResult& OnComplete)
-{
-	const TSharedRef<FJsonObject> Request = MakeShared<FJsonObject>();
-	Request->SetStringField(TEXT("provider_id"), ProviderId);
-	Request->SetStringField(TEXT("provider_token"), ProviderToken);
-	Request->SetStringField(TEXT("device_id"), TEXT(""));
-
-	FString JsonPayload;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonPayload);
-	FJsonSerializer::Serialize(Request, Writer);
-
-	DispatchLogin(JsonPayload, OnComplete);
-}
-
-void UWebzenSDKSubsystem::DispatchLogin(const FString& JsonPayload, const FWebzenLoginResult& OnComplete)
-{
-#if PLATFORM_ANDROID
-	// Mirrors WebzenSDK.login's Kotlin fun-interface callback (see
-	// platform/android/aar) using Unreal's FJavaClassObject-free raw JNI
-	// helpers -- this keeps the Android path in one file instead of adding a
-	// second generated Java class just for Unreal.
-	if (JNIEnv* Env = FAndroidApplication::GetJavaEnv())
+	if (RequestId.IsEmpty())
 	{
-		jclass Class = FAndroidApplication::FindJavaClass("com/webzen/sdk/WebzenSDK");
-		jmethodID Method = Env->GetStaticMethodID(
-			Class, "loginWithoutCallbackInterface", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
-		// NOTE: com.webzen.sdk.WebzenSDK.login() takes a fun-interface
-		// callback that isn't directly constructible from raw JNI without a
-		// generated proxy class. Games needing Unreal+Android should add a
-		// small companion Java class analogous to Unity's
-		// AndroidJavaProxy-based LoginCallbackProxy; left as a follow-up
-		// once a real Unreal+Android integration exercises this path.
-		(void)Method;
-		(void)Class;
-		OnComplete.ExecuteIfBound(false, TEXT(""), TEXT(""), TEXT("android_not_yet_wired_for_unreal"));
+		OnComplete.ExecuteIfBound(FWebzenResult{.ErrorCode = TEXT("invalid_request"), .ErrorMessage = TEXT("missing request_id")});
+		return;
 	}
-#elif PLATFORM_IOS || PLATFORM_WINDOWS
-	auto* Context = new FLoginCallbackContext{OnComplete};
-	Webzen_DispatchCommand("auth.login", TCHAR_TO_UTF8(*JsonPayload), &HandleDispatchResult, Context);
-#else
-	OnComplete.ExecuteIfBound(false, TEXT(""), TEXT(""), TEXT("platform_not_supported"));
-#endif
+
+	{
+		FScopeLock Lock(&PendingLock());
+		Pending().Add(RequestId, OnComplete);
+	}
+
+	const DispatchCommandFn Fn = ResolveDispatchCommand();
+	if (!Fn)
+	{
+		FScopeLock Lock(&PendingLock());
+		Pending().Remove(RequestId);
+		OnComplete.ExecuteIfBound(FWebzenResult{.RequestId = RequestId, .ErrorCode = TEXT("native_library_unavailable")});
+		return;
+	}
+
+	Fn(TCHAR_TO_UTF8(*CommandId), TCHAR_TO_UTF8(*RequestJson), &HandleDispatchResult);
+}
+
+void UWebzenSDKSubsystem::Initialize(const FRequestInitialize& Request, const FWebzenResultDelegate& OnComplete)
+{
+	const FString Json = BuildRequestJson([&](const TSharedRef<FJsonObject>& Obj) {
+		Obj->SetStringField(TEXT("base_url"), Request.BaseUrl);
+	});
+	Dispatch(TEXT("core.initialize"), Json, OnComplete);
+}
+
+void UWebzenSDKSubsystem::Login(const FRequestLogin& Request, const FWebzenResultDelegate& OnComplete)
+{
+	const FString Json = BuildRequestJson([&](const TSharedRef<FJsonObject>& Obj) {
+		Obj->SetStringField(TEXT("provider_id"), Request.ProviderId);
+		Obj->SetStringField(TEXT("provider_token"), Request.ProviderToken);
+		Obj->SetStringField(TEXT("device_id"), Request.DeviceId);
+	});
+	Dispatch(TEXT("auth.login"), Json, OnComplete);
 }

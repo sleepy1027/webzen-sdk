@@ -4,10 +4,9 @@
 # needing an NDK, Xcode or MSVC install.
 
 add_library(webzen_host_adapter STATIC
-    src/host_adapter.cpp
+    host_adapter.cpp
 )
-target_include_directories(webzen_host_adapter PUBLIC include)
 target_link_libraries(webzen_host_adapter PUBLIC webzen::core)
 
-add_executable(webzen_host_demo src/main.cpp)
-target_link_libraries(webzen_host_demo PRIVATE webzen_host_adapter webzen::core)
+add_executable(webzen_host_demo main.cpp)
+target_link_libraries(webzen_host_demo PRIVATE webzen_host_adapter webzen::core webzen::auth)

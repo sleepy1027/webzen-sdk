@@ -56,6 +56,6 @@ android {
 }
 
 dependencies {
+    // Backs WebzenSecureStorage.kt only -- nothing else here uses AndroidX.
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    implementation("androidx.core:core-ktx:1.13.1")
 }

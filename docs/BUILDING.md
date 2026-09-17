@@ -10,13 +10,15 @@ whatever your distro/macOS's package manager calls it).
 ./scripts/build_host.sh
 ```
 
-This is the one to run after any change under `core/`. It configures with
-the `host` CMake preset, builds `webzen_core_tests` and `webzen_host_demo`,
-runs the test suite, then runs the demo binary as an end-to-end smoke test
-of the whole pipeline (platform adapter → `Sdk::Initialize` → command
-dispatch → `AuthService` → `HttpClient`, against a deliberately unreachable
-URL so a graceful `login_failed` — not a crash or `unknown_command` — is the
-expected, successful result).
+This is the one to run after any change under `core/` or a feature module
+(`auth/`, ...). It configures with the `host` CMake preset, builds
+`webzen_tests` and `webzen_host_demo`, runs the test suite, then runs the
+demo binary as an end-to-end smoke test of the whole pipeline: platform
+adapter → `Webzen_DispatchCommand("core.initialize", ...)` →
+`Webzen_DispatchCommand("auth.login", ...)` → `CommandRegistry` →
+`AuthService` → `HttpClient`, against a deliberately unreachable URL so a
+graceful `login_failed` — not a crash or `unknown_command` — is the
+expected, successful result.
 
 Dependencies (glaze, asio, Catch2) are fetched via CMake `FetchContent` on
 every platform including this one, so no vcpkg is needed just to build and
@@ -61,7 +63,10 @@ This builds three static `libwebzen_core.a` slices (device arm64, simulator
 arm64, simulator x86_64), `lipo`s the two simulator slices into one, and
 runs `xcodebuild -create-xcframework` to produce a single
 `WebzenSDK.xcframework` containing both a device and a simulator library,
-with `webzen/*.h` and `WebzenIOSSDK.h` bundled as its public headers.
+with `core/sdk_c_api.h` and `core/export.h` bundled as its public headers
+(the only public surface — see "Why there's no per-OS bridge class" in the
+README; everything else in `core/`/`auth/` is an internal implementation
+detail neither engine bridge includes directly).
 
 **Required in the consuming Xcode project: link with `-force_load`.**
 Commands register themselves in `CommandRegistry` via static initializers
@@ -79,10 +84,12 @@ If you're integrating the static library some other way, add
 
 The script copies the built `.xcframework` to both
 `bridge/unity/Plugins/iOS/` and `bridge/unreal/ThirdParty/WebzenCore/IOS/`,
-and stages `webzen/sdk_c_api.h` + `webzen/export.h` under
-`bridge/unreal/ThirdParty/WebzenCore/include/webzen/` (the Unreal plugin
+and stages `core/sdk_c_api.h` + `core/export.h` under
+`bridge/unreal/ThirdParty/WebzenCore/include/core/` (the Unreal plugin
 needs its own copy of the public C headers since it ships standalone once
-copied into a separate Unreal project).
+copied into a separate Unreal project — kept at `include/core/...` so
+`WebzenSDKSubsystem.cpp`'s `#include "core/sdk_c_api.h"` resolves the same
+way it does inside this repo).
 
 ## Windows — `webzen_core.dll`
 
@@ -97,8 +104,8 @@ $env:VCPKG_ROOT = "C:\path\to\vcpkg"
 Builds `webzen_core.dll` + the `webzen_core.lib` import library and copies
 them to `bridge/unity/Plugins/x86_64/` and
 `bridge/unreal/ThirdParty/WebzenCore/Win64/` (plus the public C headers into
-`bridge/unreal/ThirdParty/WebzenCore/include/webzen/`, same reasoning as
-iOS above).
+`bridge/unreal/ThirdParty/WebzenCore/include/core/`, same reasoning as iOS
+above).
 
 ## CI
 
@@ -107,6 +114,35 @@ iOS above).
 (`ubuntu-latest` + NDK), `build-ios.yml` (`macos-14`), `build-windows.yml`
 (`windows-latest`). Each bootstraps its own throwaway vcpkg checkout and
 uploads the resulting artifact.
+
+## Adding a new feature module
+
+Follow `auth/` as the template when migrating the next domain (Billing,
+WebView, Push, Crash, MMP) out of the legacy per-OS libraries:
+
+1. New top-level directory (`billing/`, `web/`, `push/`, `analytics/`,
+   `crashreport/`) with headers and sources side by side — no `include/` vs
+   `src/` split.
+2. Its own `CMakeLists.txt` building an `OBJECT` library (copy `auth/CMakeLists.txt`
+   and rename), linking `webzen::core` and aliased as `webzen::<module>`.
+   `add_subdirectory(<module>)` in the root `CMakeLists.txt`.
+3. `Request<Feature>`/`Result` payload types deriving from `webzen::Request`
+   (`core/request.hpp`) and a `Command` implementation registered with
+   `REGISTER_COMMAND("<module>.<action>", ...)`.
+4. Link the new module into **every** platform artifact that ships it
+   (`platform/android/CMakeLists.txt`, `platform/ios/CMakeLists.txt`,
+   `platform/windows/CMakeLists.txt` each need `webzen::<module>` added to
+   their `target_link_libraries()` — a module that migrates in but isn't
+   linked into the shipped artifact silently never runs).
+5. Its own `<module>/tests/` — picked up automatically by `tests/CMakeLists.txt`'s glob.
+
+Nothing in `bridge/unity` or `bridge/unreal` needs to change: both already
+call `DispatchCommand`/`Dispatch` generically by command id, so a new
+command id just starts working once the module above ships in the native
+artifact. Add a typed convenience wrapper (a `RequestFoo` class/struct + a
+thin method) on the bridge side only if it's worth the ergonomics —
+`WebzenSDK.Dispatch(request, callback)` / `UWebzenSDKSubsystem::Dispatch(...)`
+work today with just the command id and hand-built JSON.
 
 ## Adding a third-party dependency
 

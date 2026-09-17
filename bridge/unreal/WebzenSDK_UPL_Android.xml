@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Unreal Plugin Language (UPL) file referenced from WebzenSDK.Build.cs via
+  AdditionalPropertiesForReceipt.Add("AndroidPlugin", ...). Embeds
+  ThirdParty/WebzenCore/Android/WebzenSDK.aar (staged by
+  scripts/build_android.sh) into the packaged APK/AAB, and merges its
+  INTERNET permission into the game's manifest.
+-->
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+	<init>
+		<log text="Webzen SDK: embedding WebzenSDK.aar" />
+	</init>
+
+	<androidManifestUpdates>
+		<addPermission android:name="android.permission.INTERNET" />
+	</androidManifestUpdates>
+
+	<gradleCopies>
+		<copyDir src="$S(PluginDir)/../../ThirdParty/WebzenCore/Android" dst="$S(BuildDir)/gradle/app/libs" />
+	</gradleCopies>
+
+	<buildGradleAdditions>
+		<insert>
+			dependencies {
+				implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
+				implementation("androidx.security:security-crypto:1.1.0-alpha06")
+				implementation("androidx.core:core-ktx:1.13.1")
+			}
+		</insert>
+	</buildGradleAdditions>
+</root>

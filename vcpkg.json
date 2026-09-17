@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "webzen-sdk-core",
+  "version": "0.1.0",
+  "description": "Webzen game SDK common C++ core (Auth/Billing/WebView/Push/Crash/MMP business logic shared across Android, iOS and Windows).",
+  "builtin-baseline": "master",
+  "dependencies": [
+    "curl",
+    "asio",
+    {
+      "name": "glaze",
+      "features": []
+    },
+    {
+      "name": "catch2",
+      "host": true
+    }
+  ],
+  "overrides": []
+}

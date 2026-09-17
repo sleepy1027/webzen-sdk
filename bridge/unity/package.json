@@ -1,0 +1,9 @@
+{
+  "name": "com.webzen.sdk",
+  "version": "0.1.0",
+  "displayName": "Webzen SDK",
+  "description": "Auth/Billing/WebView/Push/Crash/MMP game SDK. Thin C# bridge only -- all business logic runs in the native common core (Android .aar / iOS .xcframework / Windows .dll dropped into Plugins/ by scripts/build_*).",
+  "unity": "2021.3",
+  "keywords": ["webzen", "sdk", "auth", "iap"],
+  "license": "MIT"
+}

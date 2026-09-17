@@ -1,0 +1,1 @@
+webzen/sdk_c_api.h and webzen/export.h land here after running scripts/build_ios.sh or build_windows.ps1 (gitignored -- built, not committed).

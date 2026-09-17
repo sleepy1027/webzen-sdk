@@ -1,0 +1,62 @@
+# Build outputs
+build/
+out/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.pdb
+*.exp
+*.ilk
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+_deps/
+
+# vcpkg
+vcpkg_installed/
+/vcpkg/
+
+# Android / Gradle
+platform/android/.gradle/
+platform/android/**/build/
+platform/android/local.properties
+platform/android/**/*.iml
+.gradle/
+*.hprof
+
+# iOS / Xcode
+platform/ios/build/
+platform/ios/**/*.xcframework/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+
+# Windows
+platform/windows/build/
+*.suo
+*.user
+
+# Packaged artifacts staged for engines
+bridge/unity/Plugins/Android/*.aar
+bridge/unity/Plugins/iOS/*.xcframework
+bridge/unity/Plugins/x86_64/*.dll
+bridge/unity/Plugins/x86_64/*.lib
+bridge/unreal/ThirdParty/WebzenCore/Android/*.aar
+bridge/unreal/ThirdParty/WebzenCore/IOS/*.xcframework
+bridge/unreal/ThirdParty/WebzenCore/Win64/*.dll
+bridge/unreal/ThirdParty/WebzenCore/Win64/*.lib
+!**/.gitkeep
+
+# Editors / OS
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

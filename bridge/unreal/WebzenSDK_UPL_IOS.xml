@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  UPL file referenced from WebzenSDK.Build.cs via
+  AdditionalPropertiesForReceipt.Add("IOSPlugin", ...). Adds the linker flag
+  the game's Xcode project needs alongside PublicAdditionalFrameworks'
+  WebzenSDK.xcframework: without it, Xcode's linker drops every
+  REGISTER_COMMAND translation unit as "unreferenced" because nothing calls
+  LoginCommand's constructor directly (CommandRegistry finds it by string at
+  runtime). See docs/BUILDING.md.
+-->
+<root xmlns:ios="http://schemas.epicgames.com/ios">
+	<init>
+		<log text="Webzen SDK: forcing full load of WebzenSDK.xcframework" />
+	</init>
+
+	<linkerFlags>
+		<insert>-force_load $(PROJECT_DIR)/Frameworks/WebzenSDK.framework/WebzenSDK</insert>
+	</linkerFlags>
+</root>

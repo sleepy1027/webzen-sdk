@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application>
+        <!-- Captures the application Context at process start; see
+             WebzenContextProvider.kt. authorities is namespaced with
+             ${applicationId} so it can't collide with the host game's own
+             providers or another copy of this SDK. -->
+        <provider
+            android:name=".WebzenContextProvider"
+            android:authorities="${applicationId}.webzensdk.contextprovider"
+            android:exported="false" />
+    </application>
+
+</manifest>

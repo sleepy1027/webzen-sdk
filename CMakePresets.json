@@ -1,0 +1,105 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "host",
+      "displayName": "Host (Linux/macOS) - core + unit tests",
+      "inherits": "base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "android-arm64-v8a",
+      "displayName": "Android arm64-v8a (.so, packaged into the AAR by Gradle)",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "$env{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake",
+        "ANDROID_ABI": "arm64-v8a",
+        "ANDROID_PLATFORM": "android-24",
+        "VCPKG_TARGET_TRIPLET": "arm64-android"
+      }
+    },
+    {
+      "name": "android-armeabi-v7a",
+      "displayName": "Android armeabi-v7a",
+      "inherits": "android-arm64-v8a",
+      "cacheVariables": {
+        "ANDROID_ABI": "armeabi-v7a",
+        "VCPKG_TARGET_TRIPLET": "arm-neon-android"
+      }
+    },
+    {
+      "name": "android-x86_64",
+      "displayName": "Android x86_64 (emulator)",
+      "inherits": "android-arm64-v8a",
+      "cacheVariables": {
+        "ANDROID_ABI": "x86_64",
+        "VCPKG_TARGET_TRIPLET": "x64-android"
+      }
+    },
+    {
+      "name": "ios-device",
+      "displayName": "iOS device (arm64)",
+      "inherits": "base",
+      "generator": "Xcode",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/ios.toolchain.cmake",
+        "WEBZEN_IOS_PLATFORM": "OS64",
+        "VCPKG_TARGET_TRIPLET": "arm64-ios"
+      }
+    },
+    {
+      "name": "ios-simulator-arm64",
+      "displayName": "iOS Simulator (Apple Silicon)",
+      "inherits": "ios-device",
+      "cacheVariables": {
+        "WEBZEN_IOS_PLATFORM": "SIMULATORARM64",
+        "VCPKG_TARGET_TRIPLET": "arm64-ios-simulator"
+      }
+    },
+    {
+      "name": "ios-simulator-x86_64",
+      "displayName": "iOS Simulator (Intel)",
+      "inherits": "ios-device",
+      "cacheVariables": {
+        "WEBZEN_IOS_PLATFORM": "SIMULATOR64",
+        "VCPKG_TARGET_TRIPLET": "x64-ios-simulator"
+      }
+    },
+    {
+      "name": "windows-x64",
+      "displayName": "Windows x64 (MSVC, .dll + .lib)",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "host", "configurePreset": "host" },
+    { "name": "android-arm64-v8a", "configurePreset": "android-arm64-v8a" },
+    { "name": "android-armeabi-v7a", "configurePreset": "android-armeabi-v7a" },
+    { "name": "android-x86_64", "configurePreset": "android-x86_64" },
+    { "name": "ios-device", "configurePreset": "ios-device" },
+    { "name": "ios-simulator-arm64", "configurePreset": "ios-simulator-arm64" },
+    { "name": "ios-simulator-x86_64", "configurePreset": "ios-simulator-x86_64" },
+    { "name": "windows-x64", "configurePreset": "windows-x64", "configuration": "Release" }
+  ],
+  "testPresets": [
+    { "name": "host", "configurePreset": "host", "output": { "outputOnFailure": true } }
+  ]
+}

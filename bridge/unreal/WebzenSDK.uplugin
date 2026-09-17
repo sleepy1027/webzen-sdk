@@ -1,0 +1,20 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "Webzen SDK",
+    "Description": "Auth/Billing/WebView/Push/Crash/MMP game SDK. Thin C++ bridge only -- all business logic runs in the native common core (Android .aar / iOS .xcframework / Windows .dll dropped into ThirdParty/WebzenCore by scripts/build_*).",
+    "Category": "Webzen",
+    "CreatedBy": "Webzen",
+    "EnabledByDefault": true,
+    "CanContainContent": false,
+    "IsBetaVersion": true,
+    "Modules": [
+        {
+            "Name": "WebzenSDK",
+            "Type": "Runtime",
+            "LoadingPhase": "PreDefault",
+            "PlatformAllowList": ["Android", "IOS", "Win64"]
+        }
+    ]
+}

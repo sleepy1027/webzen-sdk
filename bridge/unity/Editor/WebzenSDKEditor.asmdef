@@ -1,0 +1,14 @@
+{
+    "name": "Webzen.SDK.Editor",
+    "rootNamespace": "Webzen.Editor",
+    "references": ["Webzen.SDK.Runtime"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

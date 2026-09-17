@@ -1,0 +1,28 @@
+name: Build iOS xcframework
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ios-xcframework:
+    runs-on: macos-14
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh"
+
+      - name: Build WebzenSDK.xcframework
+        run: ./scripts/build_ios.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebzenSDK-ios
+          path: bridge/unreal/ThirdParty/WebzenCore/IOS/WebzenSDK.xcframework

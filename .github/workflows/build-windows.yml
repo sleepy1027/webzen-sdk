@@ -1,0 +1,30 @@
+name: Build Windows DLL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-dll:
+    runs-on: windows-latest
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
+
+      - name: Build webzen_core.dll
+        run: ./scripts/build_windows.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebzenSDK-windows
+          path: |
+            bridge/unreal/ThirdParty/WebzenCore/Win64/webzen_core.dll
+            bridge/unreal/ThirdParty/WebzenCore/Win64/webzen_core.lib

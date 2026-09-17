@@ -1,0 +1,27 @@
+name: CI (host build + tests)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-openssl-dev
+
+      - name: Configure
+        run: cmake --preset host
+
+      - name: Build
+        run: cmake --build --preset host -j"$(nproc)"
+
+      - name: Test
+        run: ctest --preset host --output-on-failure
+
+      - name: Smoke test the C ABI end to end
+        run: ./build/host/bin/webzen_host_demo

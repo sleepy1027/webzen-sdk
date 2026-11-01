@@ -9,7 +9,21 @@
 |---|---|
 | `work-system-setup` | 4단계로 업무 시스템을 구축하는 가이드 + 템플릿 (about-me, 업무 인벤토리, SKILL 템플릿, 평가표) |
 | `smart-task` | 모든 업무에 쓰는 기본 프로토콜: 목표·완료조건 → 맥락 → 계획 → 실행 → 자기검증 → 보고 |
-| `lessons-learned` | 피드백·실패를 LESSONS.md / about-me / SKILL.md에 반영해 같은 실수를 반복하지 않게 함 |
+| `lessons-learned` | 피드백·실패를 LESSONS.md / INSTRUCTIONS.md / SKILL.md에 반영해 같은 실수를 반복하지 않게 함 |
+| `self-improve` | 시스템 자체를 점검해 개선안 제안 → 승인 항목만 반영 → VERSION·CHANGELOG 갱신, 원본 저장소에서 최신 버전 받기 |
+
+| 에이전트 (`agents/*.md`, Claude Code 서브에이전트) | 역할 |
+|---|---|
+| `work-reviewer` | 결과물을 넘기기 전 독립 검토 (완료 조건, 사실 대조, 형식) |
+| `context-researcher` | 작업 전 맥락 수집, 출처와 함께 요약 |
+| `skill-builder` | 반복 업무를 SKILL.md로 만들거나 고침 |
+| `system-improver` | 지침·스킬·에이전트를 점검해 개선안(diff) 제안 |
+
+| 파일 | 역할 |
+|---|---|
+| `AGENTS.md` | 어떤 AI 도구에나 붙는 공통 지침 (Codex·Cursor 등은 그대로, Claude Code는 `CLAUDE.md`에 `@AGENTS.md`) |
+| `INSTRUCTIONS.md` | 사용자 지시사항 기록. 작업 전에 항상 읽는다 |
+| `VERSION`, `CHANGELOG.md` | 자가 업데이트 이력 |
 
 ```
 ai-work-system/
@@ -18,8 +32,11 @@ ai-work-system/
 │   │   ├── SKILL.md
 │   │   └── templates/ (about-me.md, task-inventory.md, SKILL.template.md, eval-rubric.md)
 │   ├── smart-task/SKILL.md
-│   └── lessons-learned/SKILL.md
-└── scripts/ (package.sh, install.sh)
+│   ├── lessons-learned/SKILL.md
+│   └── self-improve/SKILL.md
+├── agents/ (work-reviewer, context-researcher, skill-builder, system-improver)
+├── AGENTS.md, INSTRUCTIONS.md, VERSION, CHANGELOG.md
+└── scripts/ (package.sh, install.sh, update.sh)
 ```
 
 ## 붙이는 방법
@@ -38,7 +55,19 @@ ai-work-system/
 ```bash
 ./ai-work-system/scripts/install.sh /path/to/repo
 ```
-채운 about-me 내용은 `~/.claude/CLAUDE.md` 또는 저장소 `CLAUDE.md`에 넣는다.
+스킬은 `.claude/skills/`, 에이전트는 `.claude/agents/`에 복사된다.
+`AGENTS.md`(나에 대해 부분을 채워서)와 `INSTRUCTIONS.md`를 프로젝트 루트에 두고, `CLAUDE.md`에 `@AGENTS.md`를 넣는다.
+
+최신 버전으로 업데이트 (키트가 git 저장소 안에 있을 때):
+```bash
+./ai-work-system/scripts/update.sh
+```
+
+### Codex / Cursor / Gemini CLI 등
+`AGENTS.md`를 프로젝트 루트에 둔다. 스킬 파일은 필요할 때 읽도록 경로를 AGENTS.md에 적어둔다.
+
+### claude.ai 에이전트 지침
+`AGENTS.md`를 프로젝트 지침에 붙여넣고, `INSTRUCTIONS.md`는 프로젝트 지식에 올린다.
 
 ### API / Agent SDK / 다른 LLM
 SKILL.md는 frontmatter(name, description)가 붙은 마크다운일 뿐이라,
@@ -49,3 +78,4 @@ SKILL.md는 frontmatter(name, description)가 붙은 마크다운일 뿐이라,
 2. 반복 업무 1~3개를 골라 스킬로 만든다 (`templates/SKILL.template.md`)
 3. 평가표로 5~10회 테스트 → 실패는 `lessons-learned`로 반영
 4. 통과선을 넘은 업무만 위험도에 맞춰 자동화(자동 / 검토 후 발송 / 항상 승인)
+5. 가끔 "self-improve로 시스템 점검해줘" → 개선안 승인 → 자동 반영 및 버전 기록

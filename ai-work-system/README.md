@@ -41,7 +41,7 @@ ai-work-system/
 ├── agents/ (work-reviewer, context-researcher, skill-builder, system-improver)
 ├── AGENTS.md, INSTRUCTIONS.md, VERSION, CHANGELOG.md
 ├── .claude-plugin/ (plugin.json, marketplace.json)
-├── install.sh, install.ps1, install.cmd
+├── install.sh, install.ps1, install.cmd, uninstall.sh, uninstall.ps1, uninstall.cmd
 └── scripts/ (package.sh, update.sh)
 ```
 
@@ -76,6 +76,17 @@ ai-work-system/
 4. `~/.claude/CLAUDE.md`에 `@~/.claude/work-system/AGENTS.md`를 추가해 모든 세션에 지침을 적용한다.
 
 다시 실행해도 안전하다. 새 버전 zip으로 다시 실행하면 업데이트되고, 개인 설정은 유지된다.
+
+### 기존 스킬·지침과 함께 쓰기 (덮어쓰기 없음)
+- **플러그인 설치:** 스킬 이름이 `work-system:<이름>`으로 따로 묶여서 기존 스킬과 파일이 겹치지 않는다.
+- **직접 복사 설치:** 같은 이름의 기존 스킬·에이전트가 있으면 그대로 두고, work-system 것은 `ws-<이름>`으로 설치한다.
+  - 설치한 파일은 `~/.claude/work-system/installed.txt`에 기록된다. 업데이트·제거 때는 이 목록에 있는 것만 건드린다.
+- **CLAUDE.md:** 수정 전에 `~/.claude/work-system/backup/`에 백업하고, 맨 끝에 한 줄만 추가한다.
+- **목적이 겹칠 때:** 예를 들어 회사 주간보고 스킬이 이미 있는 경우다.
+  - `work-setup`이 기존 스킬·에이전트·지침을 조사해 겹침과 충돌을 찾는다.
+  - 기본은 **기존 것 우선 + work-system으로 빈 곳 보충**이다.
+  - 사용자가 확인한 결정은 `~/.claude/work-system/INTEGRATION.md`에 기록되고 모든 세션에 적용된다.
+- **제거:** `uninstall.cmd`(Windows) 또는 `bash uninstall.sh`를 실행한다. work-system이 설치한 것만 지우고 개인 설정은 남긴다. 개인 설정까지 지우려면 `--purge`(Windows는 `-Purge`)를 붙인다.
 
 ### 3. 초기 설정 (자료가 있는 세션에서)
 자료가 들어 있는 작업 폴더에서 Claude Code를 새로 열고 아래를 입력한다.

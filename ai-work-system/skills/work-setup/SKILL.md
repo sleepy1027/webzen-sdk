@@ -6,7 +6,7 @@ description: work-system 패키지를 설치한 뒤 처음 한 번 실행하는 
 # work-system 초기 설정 (한 번에)
 
 이 스킬의 기본 폴더(로드 시 "Base directory for this skill"로 표시됨)를 `$SKILL`이라 한다.
-- 템플릿: `$SKILL/templates/` (AGENTS.md, INSTRUCTIONS.md, LESSONS.md, CONFIG.md)
+- 템플릿: `$SKILL/templates/` (AGENTS.md, INSTRUCTIONS.md, LESSONS.md, CONFIG.md, INTEGRATION.md)
 - 보드 원본: `$SKILL/../team-board/assets/team-board.html`
 - 설치 대상(작업 시스템 홈): `~/.claude/work-system/` (Windows: `%USERPROFILE%\.claude\work-system\`)
 
@@ -16,6 +16,32 @@ description: work-system 패키지를 설치한 뒤 처음 한 번 실행하는 
 - `~/.claude/work-system/` 존재 여부와 그 안의 파일, `CONFIG.md`의 보드 URL을 확인한다.
 - 이미 있는 파일은 **덮어쓰지 않는다**. 빠진 파일만 템플릿에서 만들고, 채워진 항목은 그대로 둔다.
 - 결과를 표로 보여준다: 항목 / 상태(있음·없음·비어 있음) / 이번에 할 일.
+
+## 0.5 기존 환경 조사와 통합 [확인]
+회사 계정에는 이미 스킬, 에이전트, 지침이 있을 수 있다. work-system은 이것들을 **대체하지 않고 빈 곳을 채운다.**
+
+1. **조사** — 있는 것만 읽고, 아무것도 고치지 않는다.
+   - 지침: `~/.claude/CLAUDE.md`, 프로젝트 `CLAUDE.md`·`CLAUDE.local.md`·`AGENTS.md`, `.claude/rules/` 등
+   - 스킬: `~/.claude/skills/*/SKILL.md`, 프로젝트 `.claude/skills/*/SKILL.md`, 이 세션에 보이는 스킬 목록(시스템이 알려주는 사용 가능한 스킬), `claude plugin list` 결과
+   - 에이전트: `~/.claude/agents/*.md`, 프로젝트 `.claude/agents/*.md`
+   - 각 항목의 이름, 설명(description), 출처만 정리한다. 본문은 겹침 판단에 필요할 때만 읽는다.
+2. **겹침 찾기** — work-system 구성요소와 목적이 같은 것을 짝짓는다.
+   | work-system | 겹칠 수 있는 기존 것 |
+   |---|---|
+   | `team-board` | 주간보고·업무보고·업무관리·Jira/Notion 연동 스킬 |
+   | `smart-task` | 작업 방식·보고 형식을 정한 지침, 리뷰 프로세스 스킬 |
+   | `lessons-learned`, `self-improve` | 메모리·회고·지침 관리 스킬, 기존 메모리 기능 |
+   | `work-system-setup`, `skill-builder` | 스킬 생성 스킬(skill-creator 등) |
+   | `work-reviewer`, `context-researcher` | 리뷰·조사 에이전트 |
+   - `ws-`로 시작하는 스킬·에이전트는 설치 스크립트가 이름이 겹쳐서 접두사를 붙여 설치한 work-system 쪽이다 (기존 것은 그대로 남아 있음).
+3. **충돌 규칙 찾기** — 기존 지침과 work-system `AGENTS.md`가 다르게 말하는 곳(보고 형식, 언어, 승인 절차 등)을 나열한다.
+4. **통합 안 제시** — 겹침마다 하나를 추천한다. 기본값은 "기존 우선 + 보충"이다.
+   - 기존 우선: 기존 스킬을 쓰고, work-system 쪽에서 빠진 것(예: 보드 데이터, 자기검증 체크리스트)만 함께 참고
+   - work-system 우선: 기존 것이 오래됐거나 범위가 좁을 때
+   - 역할 분리: 둘이 다른 범위를 맡게 (예: 회사 스킬은 양식, team-board는 데이터)
+   - 충돌 규칙은 기본적으로 기존(회사) 규칙을 따른다.
+5. 사용자가 승인한 결과를 `~/.claude/work-system/INTEGRATION.md`의 라우팅 표, 충돌 결정 표, 조사 기록에 적는다. 이 파일은 `AGENTS.md`가 불러오므로 모든 세션에 적용된다.
+6. 기존 파일을 고쳐야만 하는 경우(사용자가 원할 때만): 수정 전 `~/.claude/work-system/backup/<날짜>/`에 원본을 복사하고, diff를 보여주고, 승인받은 뒤 고친다.
 
 ## 1. 세션 자료에서 정보 모으기
 이 세션에서 접근할 수 있는 자료를 훑어서 아래를 찾는다. 찾은 것은 **출처와 함께** 정리하고, 추측으로 채우지 않는다.
@@ -30,7 +56,7 @@ description: work-system 패키지를 설치한 뒤 처음 한 번 실행하는 
 
 ## 2. 작업 시스템 홈 만들기
 1. `~/.claude/work-system/` 폴더를 만든다.
-2. 템플릿 4개 중 없는 것을 복사한다.
+2. 템플릿 5개 중 없는 것을 복사한다.
 3. `AGENTS.md`의 "1. 나에 대해"를 1단계에서 찾은 내용으로 채운다. 확인되지 않은 칸은 비워 두고 "(확인 필요)"라고 적는다.
 4. `CONFIG.md`에 팀명, 보고 대상·요일, 설치 버전(`$SKILL/../../.claude-plugin/plugin.json`의 version, 없으면 비움), 오늘 날짜를 적는다.
 5. 기존 주간보고 양식을 찾았으면 `~/.claude/work-system/REPORT_TEMPLATE.md`로 저장한다 (team-board 스킬이 이 양식을 우선 사용).
@@ -62,11 +88,13 @@ CONFIG.md에 보드 URL이 이미 있으면 이 단계를 건너뛴다(보드를
 
 ## 6. 마무리 보고
 - 만든/바꾼 파일 목록과 보드 URL
+- 기존 환경과의 통합 결과 요약 (겹친 항목과 결정, 접두사 `ws-`로 설치된 항목)
 - 비어 있어 사용자가 채워야 할 칸(about-me의 확인 필요 항목 등)
 - 팀원 초대 방법: 보드 화면 오른쪽 위 공유 메뉴 → 팀원 초대(편집하려면 Contributor 이상)
 - 바로 써볼 문장 3개: "이번 주 마감 업무 보여줘", "OO에게 '△△' 업무 추가, 마감 금요일", "이번 주 실 주간보고 초안 써줘"
 
 ## 하지 말 것
-- 기존 `~/.claude/CLAUDE.md`나 work-system 파일을 덮어쓰지 않는다.
+- 기존 `~/.claude/CLAUDE.md`, 기존 스킬·에이전트, work-system 파일을 덮어쓰지 않는다. 기존 것은 읽기만 하고, 통합은 INTEGRATION.md의 규칙으로 한다.
+- 기존 스킬을 비활성화하거나 지우지 않는다.
 - 확인 없이 보드에 데이터를 쓰거나 보드를 새로 만들지 않는다.
 - 회사 자료의 내용을 보드 외의 외부 서비스로 보내지 않는다.

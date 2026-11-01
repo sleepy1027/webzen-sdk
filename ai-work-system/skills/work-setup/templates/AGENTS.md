@@ -5,6 +5,13 @@ work-system 설치 시 `~/.claude/work-system/AGENTS.md`에 생성되고, `~/.cl
 같은 폴더의 `INSTRUCTIONS.md`(사용자 지시 기록), `LESSONS.md`(피드백 기록), `CONFIG.md`(보드 URL 등 설정)를 함께 참고한다.
 업무를 시작하기 전에 `INSTRUCTIONS.md`를 읽는다.
 
+## 0. 기존 환경과 함께 쓰기
+- 이 지침은 기존 회사·프로젝트 지침과 스킬을 **대체하지 않고 빈 곳을 채운다.** 충돌하면 기존 지침(프로젝트 `CLAUDE.md`, 회사 스킬·플러그인, 조직 정책)이 우선이다.
+- 같은 목적의 스킬이 여럿이면 `~/.claude/work-system/INTEGRATION.md`의 라우팅 표를 따른다. 표에 없으면 기존 스킬을 우선 쓰고, work-system 규칙은 빠진 부분만 보충한다.
+- work-system이 만든 파일이 아닌 스킬·에이전트·지침 파일은 사용자 승인 없이 고치지 않는다. 고칠 때는 `~/.claude/work-system/backup/`에 원본을 먼저 복사한다.
+
+@~/.claude/work-system/INTEGRATION.md
+
 ## 1. 나에 대해 (채워서 쓰기)
 - 역할/직무:
 - 팀/주요 이해관계자:

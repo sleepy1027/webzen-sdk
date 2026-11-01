@@ -3,6 +3,14 @@
 버전은 `VERSION` 파일과 맞춘다. 스킬·에이전트·지침을 바꿀 때마다 한 줄 이상 남긴다.
 형식: `## x.y.z — YYYY-MM-DD` 아래 `- [파일] 변경 내용 (이유)`
 
+## 0.5.0 — 2026-11-01
+- [설치] 기존 스킬·에이전트를 덮어쓰지 않음: 이름이 겹치면 `ws-<이름>`으로 설치, 설치 파일은 installed.txt에 기록해 그것만 업데이트·제거
+- [설치] CLAUDE.md 수정 전 백업, 맨 끝에 한 줄만 추가
+- [uninstall.sh / .ps1 / .cmd] work-system이 설치한 것만 제거, 개인 설정은 보존(--purge로 삭제)
+- [INTEGRATION.md] 기존 환경과의 우선순위·라우팅·충돌 결정 기록, AGENTS.md가 불러옴
+- [work-setup] 0.5단계: 기존 스킬·에이전트·지침 조사 → 겹침·충돌 찾기 → 기존 우선 통합안 → INTEGRATION.md
+- [AGENTS.md 0절] 기존 지침 우선, 빈 곳만 채움
+
 ## 0.4.0 — 2026-11-01
 - [패키지] Claude Code 플러그인(work-system) + 로컬 마켓플레이스로 구성, zip 하나로 배포
 - [install.sh / install.ps1 / install.cmd] 한 번에 설치 (플러그인 설치, 실패 시 직접 복사, 작업 시스템 홈 생성, CLAUDE.md 연결)

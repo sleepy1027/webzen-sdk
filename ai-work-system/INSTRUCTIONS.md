@@ -33,3 +33,8 @@
 - 원문: "회사 계정으로 만든 다른 PC에서 데이터를 넣어놓은 새 세션에 사용할 예정이야. 그러니까 패키지 형태로 깔 수 있게 한 방에 만들어 주어."
 - 해석: 개인 계정에 묶인 것(보드 URL) 없이, zip 하나 + 설치 명령 한 번으로 설치되고, 자료가 있는 새 세션에서 초기 설정 한 번으로 지침·보드·데이터까지 갖춰지게 한다. 회사 PC는 Windows일 가능성이 높아 PowerShell 설치도 지원한다.
 - 반영: `.claude-plugin/`(플러그인+로컬 마켓플레이스), `install.sh`/`install.ps1`/`install.cmd`, `skills/work-setup`(세션 자료 기반 초기 설정), 개인 설정을 `~/.claude/work-system/`로 분리(업데이트해도 유지), team-board 스킬은 CONFIG.md에서 보드 URL을 읽음, `scripts/package.sh`가 `dist/work-system-<버전>.zip` 생성
+
+## 7. 기존 회사 환경과 덮어쓰기 없이 섞이기 (2026-11-01)
+- 원문: "기존 회사 계정에서도 스킬 앱이나 이런 것 파일들이 이미 있을 텐데 얘랑 덮어쓰기 안 되고 자연스럽게 섞일 수 있게."
+- 해석: 설치·업데이트·제거가 기존 스킬·에이전트·지침 파일을 절대 덮어쓰거나 지우지 않는다. 목적이 겹치면 기존 것을 우선하고 work-system은 빈 곳만 채우며, 어떤 걸 쓸지는 규칙 파일로 정한다.
+- 반영: install.sh/.ps1(ws- 접두사, installed.txt, CLAUDE.md 백업), uninstall.*, `templates/INTEGRATION.md`, AGENTS.md 0절, work-setup 0.5단계, self-improve·smart-task·team-board 설명

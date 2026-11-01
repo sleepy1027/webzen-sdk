@@ -10,6 +10,7 @@
 | `work-system-setup` | 4단계로 업무 시스템을 구축하는 가이드 + 템플릿 (about-me, 업무 인벤토리, SKILL 템플릿, 평가표) |
 | `smart-task` | 모든 업무에 쓰는 기본 프로토콜: 목표·완료조건 → 맥락 → 계획 → 실행 → 자기검증 → 보고 |
 | `lessons-learned` | 피드백·실패를 LESSONS.md / INSTRUCTIONS.md / SKILL.md에 반영해 같은 실수를 반복하지 않게 함 |
+| `team-board` | 팀 업무 보드의 업무·팀원 데이터를 읽고 쓰기, 일정 체크, 실 주간보고 작성 |
 | `self-improve` | 시스템 자체를 점검해 개선안 제안 → 승인 항목만 반영 → VERSION·CHANGELOG 갱신, 원본 저장소에서 최신 버전 받기 |
 
 | 에이전트 (`agents/*.md`, Claude Code 서브에이전트) | 역할 |
@@ -33,11 +34,22 @@ ai-work-system/
 │   │   └── templates/ (about-me.md, task-inventory.md, SKILL.template.md, eval-rubric.md)
 │   ├── smart-task/SKILL.md
 │   ├── lessons-learned/SKILL.md
+│   ├── team-board/SKILL.md
 │   └── self-improve/SKILL.md
+├── tools/team-board.html
 ├── agents/ (work-reviewer, context-researcher, skill-builder, system-improver)
 ├── AGENTS.md, INSTRUCTIONS.md, VERSION, CHANGELOG.md
 └── scripts/ (package.sh, install.sh, update.sh)
 ```
+
+## 팀 업무 보드 (웹 툴)
+
+https://claude.ai/artifact/R4DWa9bB3NRAEvD1Ty6pZo · 원본 `tools/team-board.html`
+
+- 보드(드래그로 상태 변경) / 목록(정렬) / 일정(월 달력 + 지연·이번 주·다음 주 마감) / 주간보고 / 팀원 탭
+- 데이터는 팀 공유 DB에 실시간 저장. 팀원은 보드 화면의 공유 메뉴에서 초대해야 열 수 있다 (편집하려면 Contributor 이상)
+- 주간보고: 주 선택 → 담당자별/프로젝트별 자동 정리 → 추가 이슈·지원 요청 입력 → 복사 / .md 저장 / AI로 다듬기 / 보고 기록 저장
+- 다른 Claude에서는 `team-board` 스킬로 "업무 추가해줘", "주간보고 써줘"처럼 쓰면 된다
 
 ## 붙이는 방법
 

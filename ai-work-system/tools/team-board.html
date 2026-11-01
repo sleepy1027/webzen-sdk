@@ -1,0 +1,779 @@
+<title>팀 업무 보드</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 상단 요약 바 + 탭(보드/목록/일정/주간보고/팀원), 본문은 탭별 작업 화면. 결재판처럼 단정하게. */
+:root {
+  --bg: #f3f4f1;
+  --surface: #ffffff;
+  --sunken: #e9ebe6;
+  --line: #d6d9d1;
+  --fg: #1d2420;
+  --muted: #5f6a63;
+  --accent: #1f6b52;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcebe4;
+  --warn: #a8660b;
+  --warn-soft: #f6e8cf;
+  --crit: #b3362b;
+  --crit-soft: #f6dcd8;
+  --info: #2c5a9e;
+  --info-soft: #dce6f4;
+  --ok: #2f7d3e;
+  --ok-soft: #dcefdc;
+  --shadow: 0 1px 2px rgba(20,30,25,.06), 0 4px 14px rgba(20,30,25,.06);
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141816; --surface: #1c211e; --sunken: #232925; --line: #333b36; --fg: #e4e8e3; --muted: #9aa59e;
+    --accent: #5fbf98; --accent-ink: #0d1a14; --accent-soft: #1f3a2f;
+    --warn: #e0a64a; --warn-soft: #3b2e17; --crit: #ec7a6e; --crit-soft: #42221f;
+    --info: #86aee8; --info-soft: #1f2d42; --ok: #7cc98a; --ok-soft: #1f3524;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141816; --surface: #1c211e; --sunken: #232925; --line: #333b36; --fg: #e4e8e3; --muted: #9aa59e;
+  --accent: #5fbf98; --accent-ink: #0d1a14; --accent-soft: #1f3a2f;
+  --warn: #e0a64a; --warn-soft: #3b2e17; --crit: #ec7a6e; --crit-soft: #42221f;
+  --info: #86aee8; --info-soft: #1f2d42; --ok: #7cc98a; --ok-soft: #1f3524;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; display: grid; gap: 16px; }
+.wrap > *, #view > * { min-width: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 15px; font-weight: 600; }
+.mono, .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.title-block { display: grid; gap: 2px; min-width: 0; }
+.eyebrow { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+.status-note { font-size: 12px; color: var(--muted); }
+.status-note.err { color: var(--crit); }
+
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 7px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--fg); background: var(--sunken); }
+.btn.danger { color: var(--crit); }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: grid; gap: 2px; text-align: left; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-family: var(--f-mono); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat.crit .v { color: var(--crit); }
+.stat.warn .v { color: var(--warn); }
+.stat.ok .v { color: var(--ok); }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { border: 0; background: transparent; padding: 9px 14px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filters select, .filters input, .field input, .field select, .field textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-width: 0; }
+.filters input[type="search"] { flex: 1 1 180px; }
+.spacer { flex: 1; }
+
+/* Board */
+.board { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+.col { background: var(--sunken); border-radius: var(--r); padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 160px; min-width: 0; }
+.col.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.col-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; padding: 2px 4px; }
+.col-head .count { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-weight: 400; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.todo { background: var(--muted); } .dot.doing { background: var(--info); } .dot.review { background: var(--warn); } .dot.done { background: var(--ok); } .dot.hold { background: var(--crit); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 10px 10px 12px; display: grid; gap: 6px; text-align: left; position: relative; box-shadow: var(--shadow); width: 100%; }
+.card[draggable="true"] { cursor: grab; }
+.card .pri { position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 2px 2px 0; }
+.pri.high { background: var(--crit); } .pri.mid { background: var(--warn); } .pri.low { background: var(--line); }
+.card .t { font-weight: 500; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; background: var(--sunken); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.chip.crit { background: var(--crit-soft); color: var(--crit); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.info { background: var(--info-soft); color: var(--info); }
+.chip.proj { background: var(--accent-soft); color: var(--accent); }
+.bar { height: 4px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.col-empty { font-size: 12px; color: var(--muted); padding: 8px 4px; }
+
+/* Table */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+table { border-collapse: collapse; width: 100%; min-width: 760px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--sunken); position: sticky; top: 0; }
+th button { border: 0; background: none; padding: 0; font-weight: 600; color: inherit; }
+tr:last-child td { border-bottom: 0; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--sunken); }
+
+/* Calendar */
+.cal-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cal-head h2 { font-family: var(--f-mono); font-weight: 500; min-width: 110px; }
+.cal-scroll { overflow-x: auto; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; min-width: 770px; }
+.cal .dow { background: var(--sunken); padding: 6px 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.cal .day { background: var(--surface); min-height: 96px; padding: 6px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal .day.out { background: var(--sunken); }
+.cal .day.out .dn { opacity: .5; }
+.cal .day.today .dn { background: var(--accent); color: var(--accent-ink); border-radius: 4px; padding: 0 5px; }
+.cal .dn { font-family: var(--f-mono); font-size: 12px; align-self: flex-start; }
+.cal .ev { font-size: 12px; border: 0; text-align: left; padding: 2px 6px; border-radius: 4px; background: var(--info-soft); color: var(--info); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+.cal .ev.done { background: var(--ok-soft); color: var(--ok); text-decoration: line-through; }
+.cal .ev.late { background: var(--crit-soft); color: var(--crit); }
+.cal .ev.hold { background: var(--warn-soft); color: var(--warn); }
+.split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.list { display: grid; gap: 6px; }
+.row { display: flex; gap: 8px; align-items: center; justify-content: space-between; border: 0; background: var(--sunken); border-radius: 6px; padding: 8px 10px; text-align: left; width: 100%; }
+.row .t { overflow-wrap: anywhere; min-width: 0; }
+.muted { color: var(--muted); }
+
+/* Report */
+.report { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.field textarea { resize: vertical; min-height: 70px; line-height: 1.55; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 6px 12px; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.week-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.week-nav .lbl { font-family: var(--f-mono); font-size: 13px; }
+#reportOut { width: 100%; min-height: 520px; font-family: var(--f-mono); font-size: 13px; line-height: 1.65; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; resize: vertical; white-space: pre-wrap; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.history { display: grid; gap: 6px; }
+
+/* Members */
+.members { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.member { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 8px; }
+.member .name { font-weight: 600; }
+.member .load { display: flex; gap: 6px; flex-wrap: wrap; }
+.add-member { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-member input { flex: 1 1 140px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-width: 0; }
+
+/* Empty */
+.empty { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); padding: 28px 20px; display: grid; gap: 10px; justify-items: start; }
+.empty h2 { font-size: 16px; }
+.empty p { margin: 0; color: var(--muted); max-width: 60ch; }
+
+/* Modal */
+.scrim { position: fixed; inset: 0; background: rgba(10,15,12,.45); display: grid; place-items: center; padding: 16px; z-index: 50; }
+.modal { background: var(--surface); border-radius: 10px; width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 18px; display: grid; gap: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.modal-foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+.confirm-del { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--crit); }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-size: 13px; z-index: 60; }
+
+@media (max-width: 760px) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .split, .report { grid-template-columns: minmax(0, 1fr); }
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+  #reportOut { min-height: 380px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="title-block">
+      <span class="eyebrow" id="todayLbl"></span>
+      <h1>팀 업무 보드</h1>
+      <span class="status-note" id="statusNote">불러오는 중…</span>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="addTaskBtn" type="button">＋ 업무 추가</button>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="요약">
+    <button class="stat" type="button" data-jump="board" data-filter="doing"><span class="k">진행 중</span><span class="v" id="sDoing">0</span></button>
+    <button class="stat warn" type="button" data-jump="cal"><span class="k">이번 주 마감</span><span class="v" id="sWeek">0</span></button>
+    <button class="stat crit" type="button" data-jump="cal"><span class="k">지연</span><span class="v" id="sLate">0</span></button>
+    <button class="stat ok" type="button" data-jump="report"><span class="k">금주 완료</span><span class="v" id="sDone">0</span></button>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="board" type="button">보드</button>
+    <button class="tab" role="tab" data-view="list" type="button">목록</button>
+    <button class="tab" role="tab" data-view="cal" type="button">일정</button>
+    <button class="tab" role="tab" data-view="report" type="button">주간보고</button>
+    <button class="tab" role="tab" data-view="team" type="button">팀원</button>
+  </nav>
+
+  <div class="filters" id="filters">
+    <select id="fMember" aria-label="담당자"></select>
+    <select id="fProject" aria-label="프로젝트"></select>
+    <input type="search" id="fQuery" placeholder="업무 검색" aria-label="업무 검색">
+  </div>
+
+  <main id="view"></main>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(() => {
+  const STATUSES = [
+    { id: "todo", label: "할 일" },
+    { id: "doing", label: "진행 중" },
+    { id: "review", label: "검토" },
+    { id: "done", label: "완료" },
+    { id: "hold", label: "보류·이슈" },
+  ];
+  const STATUS_LABEL = Object.fromEntries(STATUSES.map(s => [s.id, s.label]));
+  const PRI = { high: "높음", mid: "보통", low: "낮음" };
+  const DOW = ["월", "화", "수", "목", "금", "토", "일"];
+
+  const state = {
+    db: null, user: null, sample: null, downloads: null,
+    canWrite: true, readOnlyLocked: false,
+    tasks: [], members: [], reports: [],
+    loaded: { tasks: false, members: false },
+    view: "board",
+    filter: { member: "", project: "", q: "", status: "" },
+    sort: { key: "due", dir: 1 },
+    calMonth: null,
+    weekStart: null,
+    reportGroup: "member",
+    reportExtra: { issues: "", requests: "", team: "" },
+    reportText: "", reportDirty: false,
+  };
+
+  // ---------- date utils (local, YYYY-MM-DD) ----------
+  const pad = n => String(n).padStart(2, "0");
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = s => { if (!s) return null; const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const mondayOf = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const w = (x.getDay() + 6) % 7; return addDays(x, -w); };
+  const today = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+  const diffDays = (a, b) => Math.round((a - b) / 86400000);
+  const md = s => { const d = parse(s); return d ? `${d.getMonth() + 1}/${d.getDate()}` : ""; };
+  const weekOfMonthLabel = mon => {
+    // 한국식 주차: 그 주의 목요일이 속한 달 기준
+    const thu = addDays(mon, 3);
+    const first = new Date(thu.getFullYear(), thu.getMonth(), 1);
+    const firstThu = addDays(first, (4 - first.getDay() + 7) % 7);
+    const n = Math.floor(diffDays(thu, firstThu) / 7) + 1;
+    return `${thu.getMonth() + 1}월 ${n}주차`;
+  };
+  const isoWeek = d => {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
+    const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return { year: t.getUTCFullYear(), week: Math.ceil(((t - y0) / 86400000 + 1) / 7) };
+  };
+  const weekKey = mon => { const w = isoWeek(mon); return `${w.year}-W${pad(w.week)}`; };
+
+  // ---------- helpers ----------
+  const $ = s => document.querySelector(s);
+  const el = (tag, attrs = {}, ...kids) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else if (k === "dataset") Object.assign(e.dataset, v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return e;
+  };
+  const memberName = id => state.members.find(m => m.id === id)?.name || "미지정";
+  const toast = msg => {
+    const root = $("#toastRoot"); root.replaceChildren(el("div", { class: "toast", role: "status", text: msg }));
+    clearTimeout(toast.t); toast.t = setTimeout(() => root.replaceChildren(), 2400);
+  };
+  const setNote = (msg, err) => { const n = $("#statusNote"); n.textContent = msg; n.classList.toggle("err", !!err); };
+
+  const isLate = t => t.status !== "done" && t.due && parse(t.due) < today();
+  const dueChip = t => {
+    if (!t.due) return null;
+    if (t.status === "done") return el("span", { class: "chip ok", text: `완료 ${md(t.doneAt || t.due)}` });
+    const d = diffDays(parse(t.due), today());
+    if (d < 0) return el("span", { class: "chip crit", text: `지연 ${-d}일` });
+    if (d === 0) return el("span", { class: "chip warn", text: "오늘 마감" });
+    if (d <= 3) return el("span", { class: "chip warn", text: `D-${d}` });
+    return el("span", { class: "chip", text: `~${md(t.due)}` });
+  };
+  const projects = () => [...new Set(state.tasks.map(t => t.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
+  const filtered = () => {
+    const { member, project, q, status } = state.filter;
+    const qq = q.trim().toLowerCase();
+    return state.tasks.filter(t =>
+      (!member || (member === "_none" ? !t.memberId : t.memberId === member)) &&
+      (!project || t.project === project) &&
+      (!status || t.status === status) &&
+      (!qq || [t.title, t.note, t.project].some(x => (x || "").toLowerCase().includes(qq))));
+  };
+
+  // ---------- writes ----------
+  async function write(fn, okMsg) {
+    if (!state.db) { toast("저장소에 연결되지 않아 저장할 수 없습니다."); return false; }
+    try { await fn(); if (okMsg) toast(okMsg); return true; }
+    catch (e) {
+      if (e?.code === "invalid_argument" && !state.canWriteKnown) { state.canWrite = false; state.readOnlyLocked = true; render(); toast("이 보드는 보기 전용 권한입니다."); }
+      else if (e?.code === "quota_exceeded") toast("저장 공간이 가득 찼습니다. 오래된 완료 업무를 지워 주세요.");
+      else if (e?.code === "unavailable") toast("잠시 연결이 불안정합니다. 다시 시도해 주세요.");
+      else toast("저장하지 못했습니다. 다시 시도해 주세요.");
+      return false;
+    }
+  }
+  const saveTask = async (id, data) => {
+    const now = new Date().toISOString();
+    const prev = state.tasks.find(t => t.id === id);
+    const body = { ...data, updatedAt: now };
+    if (body.status === "done" && (!prev || prev.status !== "done")) body.doneAt = ymd(today());
+    if (body.status !== "done") body.doneAt = null;
+    if (!prev) body.createdAt = now;
+    else body.createdAt = prev.createdAt || now;
+    const ref = id ? state.db.collection("tasks").doc(id) : state.db.collection("tasks").doc();
+    return write(() => ref.set(body), prev ? "저장했습니다" : "업무를 추가했습니다");
+  };
+  const moveTask = (id, status) => {
+    const t = state.tasks.find(x => x.id === id); if (!t || t.status === status) return;
+    const { id: _, ...rest } = t;
+    const patch = { ...rest, status, progress: status === "done" ? 100 : rest.progress };
+    saveTask(id, patch);
+  };
+
+  // ---------- modal ----------
+  function openTask(task) {
+    if (!state.canWrite && !task) return;
+    const t = task || { title: "", memberId: state.filter.member && state.filter.member !== "_none" ? state.filter.member : "", project: state.filter.project || "", status: "todo", priority: "mid", start: ymd(today()), due: "", progress: 0, note: "" };
+    const ro = !state.canWrite;
+    const f = (id, label, input) => el("div", { class: "field" }, el("label", { for: id, text: label }), input);
+    const title = el("input", { id: "mTitle", value: t.title, placeholder: "예: 결제 모듈 iOS 연동 테스트", disabled: ro });
+    const member = el("select", { id: "mMember", disabled: ro },
+      el("option", { value: "", text: "미지정" }),
+      state.members.map(m => el("option", { value: m.id, text: m.name, selected: m.id === t.memberId })));
+    const projList = el("datalist", { id: "projList" }, projects().map(p => el("option", { value: p })));
+    const project = el("input", { id: "mProject", value: t.project || "", list: "projList", placeholder: "프로젝트/과제명", disabled: ro });
+    const status = el("select", { id: "mStatus", disabled: ro }, STATUSES.map(s => el("option", { value: s.id, text: s.label, selected: s.id === t.status })));
+    const pri = el("select", { id: "mPri", disabled: ro }, Object.entries(PRI).map(([k, v]) => el("option", { value: k, text: v, selected: k === t.priority })));
+    const start = el("input", { id: "mStart", type: "date", value: t.start || "", disabled: ro });
+    const due = el("input", { id: "mDue", type: "date", value: t.due || "", disabled: ro });
+    const prog = el("input", { id: "mProg", type: "number", min: "0", max: "100", step: "10", value: String(t.progress ?? 0), disabled: ro });
+    const note = el("textarea", { id: "mNote", rows: "4", placeholder: "진행 상황, 이슈, 보고에 넣을 메모", disabled: ro });
+    note.value = t.note || "";
+    const err = el("span", { class: "status-note err" });
+    const close = () => $("#modalRoot").replaceChildren();
+    const foot = el("div", { class: "modal-foot" });
+    const save = el("button", { class: "btn primary", type: "button", text: task ? "저장" : "추가", onclick: async () => {
+      const titleV = title.value.trim();
+      if (!titleV) { err.textContent = "업무명을 입력해 주세요."; title.focus(); return; }
+      if (start.value && due.value && due.value < start.value) { err.textContent = "마감일이 시작일보다 빠릅니다."; due.focus(); return; }
+      save.disabled = true;
+      const ok = await saveTask(task?.id, {
+        title: titleV, memberId: member.value || null, project: project.value.trim() || null,
+        status: status.value, priority: pri.value, start: start.value || null, due: due.value || null,
+        progress: Math.max(0, Math.min(100, Number(prog.value) || 0)), note: note.value.trim(),
+      });
+      save.disabled = false;
+      if (ok) close();
+    } });
+    if (task && !ro) {
+      const delWrap = el("div", { class: "spacer" });
+      const delBtn = el("button", { class: "btn ghost danger", type: "button", text: "삭제", onclick: () => {
+        delWrap.replaceChildren(el("span", { class: "confirm-del" }, "정말 삭제할까요?",
+          el("button", { class: "btn danger", type: "button", text: "삭제", onclick: async () => {
+            if (await write(() => state.db.collection("tasks").doc(task.id).delete(), "삭제했습니다")) close();
+          } }),
+          el("button", { class: "btn ghost", type: "button", text: "취소", onclick: () => delWrap.replaceChildren(delBtn) })));
+      } });
+      delWrap.append(delBtn);
+      foot.append(delWrap);
+    }
+    foot.append(err, el("button", { class: "btn", type: "button", text: ro ? "닫기" : "취소", onclick: close }));
+    if (!ro) foot.append(save);
+    const modal = el("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "mHead" },
+      el("h2", { id: "mHead", text: task ? "업무 상세" : "업무 추가" }),
+      f("mTitle", "업무명", title),
+      el("div", { class: "grid2" }, f("mMember", "담당자", member), f("mProject", "프로젝트", project)),
+      el("div", { class: "grid2" }, f("mStatus", "상태", status), f("mPri", "우선순위", pri)),
+      el("div", { class: "grid2" }, f("mStart", "시작일", start), f("mDue", "마감일", due)),
+      f("mProg", "진행률 (%)", prog),
+      f("mNote", "메모", note),
+      projList, foot);
+    const scrim = el("div", { class: "scrim", onclick: e => { if (e.target === scrim) close(); } }, modal);
+    scrim.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+    $("#modalRoot").replaceChildren(scrim);
+    (ro ? modal.querySelector("button") : title).focus();
+  }
+
+  // ---------- views ----------
+  function emptyState() {
+    const box = el("div", { class: "empty" },
+      el("h2", { text: "아직 등록된 업무가 없습니다" }),
+      el("p", { text: "팀원을 먼저 등록하고 업무를 추가하면 보드·일정·주간보고가 자동으로 채워집니다. 담당자 없이 업무부터 추가해도 됩니다." }));
+    if (state.canWrite) box.append(el("div", { class: "actions" },
+      el("button", { class: "btn primary", type: "button", text: "＋ 업무 추가", onclick: () => openTask() }),
+      el("button", { class: "btn", type: "button", text: "팀원 등록", onclick: () => go("team") })));
+    return box;
+  }
+
+  function cardFor(t) {
+    const c = el("button", { class: "card", type: "button", draggable: state.canWrite ? "true" : null, onclick: () => openTask(t) },
+      el("span", { class: "pri " + (t.priority || "mid"), "aria-hidden": "true" }),
+      el("span", { class: "t", text: t.title }),
+      el("span", { class: "meta" },
+        el("span", { text: memberName(t.memberId) }),
+        t.project ? el("span", { class: "chip proj", text: t.project }) : null,
+        dueChip(t)),
+      (t.status === "doing" || t.status === "review") && t.progress ? el("span", { class: "bar", "aria-label": `진행률 ${t.progress}%` }, el("i", { style: `width:${t.progress}%` })) : null);
+    c.addEventListener("dragstart", e => { e.dataTransfer.setData("text/plain", t.id); e.dataTransfer.effectAllowed = "move"; });
+    return c;
+  }
+
+  function viewBoard() {
+    const list = filtered();
+    const board = el("div", { class: "board" });
+    for (const s of STATUSES) {
+      const items = list.filter(t => t.status === s.id).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+      const col = el("section", { class: "col", "aria-label": s.label },
+        el("div", { class: "col-head" }, el("span", { class: "dot " + s.id }), s.label, el("span", { class: "count", text: items.length })),
+        items.length ? items.map(cardFor) : el("div", { class: "col-empty", text: state.canWrite ? "카드를 끌어다 놓을 수 있습니다" : "없음" }));
+      if (state.canWrite) {
+        col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("drop"); });
+        col.addEventListener("dragleave", () => col.classList.remove("drop"));
+        col.addEventListener("drop", e => { e.preventDefault(); col.classList.remove("drop"); moveTask(e.dataTransfer.getData("text/plain"), s.id); });
+      }
+      board.append(col);
+    }
+    return board;
+  }
+
+  function viewList() {
+    const cols = [["title", "업무"], ["member", "담당"], ["project", "프로젝트"], ["status", "상태"], ["priority", "우선"], ["start", "시작"], ["due", "마감"], ["progress", "진행"]];
+    const { key, dir } = state.sort;
+    const val = (t, k) => k === "member" ? memberName(t.memberId) : k === "priority" ? ({ high: 0, mid: 1, low: 2 })[t.priority] ?? 1 : k === "status" ? STATUSES.findIndex(s => s.id === t.status) : (t[k] ?? (k === "due" || k === "start" ? "9999" : ""));
+    const rows = filtered().sort((a, b) => { const x = val(a, key), y = val(b, key); return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+    return el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, cols.map(([k, l]) => el("th", { "aria-sort": key === k ? (dir > 0 ? "ascending" : "descending") : null },
+        el("button", { type: "button", text: l + (key === k ? (dir > 0 ? " ↑" : " ↓") : ""), onclick: () => { state.sort = { key: k, dir: key === k ? -dir : 1 }; render(); } }))))),
+      el("tbody", {}, rows.length ? rows.map(t => el("tr", { tabindex: "0", onclick: () => openTask(t), onkeydown: e => { if (e.key === "Enter") openTask(t); } },
+        el("td", {}, t.title), el("td", {}, memberName(t.memberId)), el("td", {}, t.project || "—"),
+        el("td", {}, el("span", { class: "chip " + ({ done: "ok", hold: "crit", review: "warn", doing: "info" })[t.status], text: STATUS_LABEL[t.status] })),
+        el("td", {}, PRI[t.priority] || "보통"), el("td", { class: "num" }, md(t.start) || "—"),
+        el("td", {}, dueChip(t) || "—"), el("td", { class: "num" }, `${t.progress ?? 0}%`)))
+        : el("tr", {}, el("td", { colspan: "8", class: "muted", text: "조건에 맞는 업무가 없습니다." })))));
+  }
+
+  function viewCal() {
+    const base = state.calMonth || new Date(today().getFullYear(), today().getMonth(), 1);
+    const start = mondayOf(base);
+    const end = addDays(mondayOf(new Date(base.getFullYear(), base.getMonth() + 1, 0)), 6);
+    const list = filtered().filter(t => t.due);
+    const byDay = {};
+    for (const t of list) (byDay[t.due] ||= []).push(t);
+    const grid = el("div", { class: "cal" }, DOW.map(d => el("div", { class: "dow", text: d })));
+    const tdy = ymd(today());
+    for (let d = start; d <= end; d = addDays(d, 1)) {
+      const k = ymd(d);
+      const evs = (byDay[k] || []).sort((a, b) => (a.status === "done") - (b.status === "done"));
+      grid.append(el("div", { class: "day" + (d.getMonth() !== base.getMonth() ? " out" : "") + (k === tdy ? " today" : "") },
+        el("span", { class: "dn", text: d.getDate() }),
+        evs.map(t => el("button", { class: "ev " + (t.status === "done" ? "done" : isLate(t) ? "late" : t.status === "hold" ? "hold" : ""), type: "button", title: `${t.title} · ${memberName(t.memberId)}`, onclick: () => openTask(t), text: `${memberName(t.memberId)} · ${t.title}` }))));
+    }
+    const thisMon = mondayOf(today());
+    const nextMon = addDays(thisMon, 7);
+    const open = filtered().filter(t => t.status !== "done");
+    const late = open.filter(isLate).sort((a, b) => a.due.localeCompare(b.due));
+    const thisWeek = open.filter(t => t.due && !isLate(t) && parse(t.due) < nextMon).sort((a, b) => a.due.localeCompare(b.due));
+    const nextWeek = open.filter(t => t.due && parse(t.due) >= nextMon && parse(t.due) < addDays(nextMon, 7)).sort((a, b) => a.due.localeCompare(b.due));
+    const rowsOf = arr => arr.length ? el("div", { class: "list" }, arr.map(t => el("button", { class: "row", type: "button", onclick: () => openTask(t) },
+      el("span", { class: "t" }, t.title, el("span", { class: "muted", text: ` · ${memberName(t.memberId)}` })), dueChip(t)))) : el("span", { class: "muted", text: "없음" });
+    return el("div", { style: "display:grid;gap:12px" },
+      el("div", { class: "split" },
+        el("section", { class: "panel" }, el("h2", { text: `지연 ${late.length}건` }), rowsOf(late)),
+        el("section", { class: "panel" }, el("h2", { text: `이번 주 마감 ${thisWeek.length}건 · 다음 주 ${nextWeek.length}건` }), rowsOf(thisWeek),
+          nextWeek.length ? el("div", { class: "list" }, el("span", { class: "muted", text: "다음 주" }), rowsOf(nextWeek)) : null)),
+      el("div", { class: "cal-head" },
+        el("button", { class: "btn", type: "button", "aria-label": "이전 달", text: "‹", onclick: () => { state.calMonth = new Date(base.getFullYear(), base.getMonth() - 1, 1); render(); } }),
+        el("h2", { text: `${base.getFullYear()}.${pad(base.getMonth() + 1)}` }),
+        el("button", { class: "btn", type: "button", "aria-label": "다음 달", text: "›", onclick: () => { state.calMonth = new Date(base.getFullYear(), base.getMonth() + 1, 1); render(); } }),
+        el("button", { class: "btn ghost", type: "button", text: "이번 달", onclick: () => { state.calMonth = null; render(); } })),
+      el("div", { class: "cal-scroll" }, grid));
+  }
+
+  // ---------- weekly report ----------
+  function buildReport() {
+    const mon = state.weekStart || mondayOf(today());
+    const sun = addDays(mon, 6), nMon = addDays(mon, 7), nSun = addDays(mon, 13);
+    const inRange = (s, a, b) => { const d = parse(s); return d && d >= a && d <= b; };
+    const tasks = state.tasks.filter(t => !state.filter.member || (state.filter.member === "_none" ? !t.memberId : t.memberId === state.filter.member))
+      .filter(t => !state.filter.project || t.project === state.filter.project);
+    const done = tasks.filter(t => t.status === "done" && inRange(t.doneAt, mon, sun));
+    const ongoing = tasks.filter(t => ["doing", "review"].includes(t.status));
+    const plan = tasks.filter(t => t.status !== "done" && t.status !== "hold" && (["doing", "review"].includes(t.status) || inRange(t.due, nMon, nSun) || inRange(t.start, nMon, nSun)));
+    const lateAsOf = sun < today() ? sun : today();
+    const issues = tasks.filter(t => t.status === "hold" || (t.status !== "done" && t.due && parse(t.due) < lateAsOf));
+
+    const keyOf = t => state.reportGroup === "member" ? memberName(t.memberId) : (t.project || "기타");
+    const order = state.reportGroup === "member" ? [...state.members.map(m => m.name), "미지정"] : null;
+    const group = arr => {
+      const g = new Map();
+      for (const t of arr) { const k = keyOf(t); if (!g.has(k)) g.set(k, []); g.get(k).push(t); }
+      const keys = [...g.keys()].sort((a, b) => order ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b, "ko"));
+      return keys.map(k => [k, g.get(k)]);
+    };
+    const sub = t => state.reportGroup === "member" ? (t.project ? `[${t.project}] ` : "") : `(${memberName(t.memberId)}) `;
+    const noteLine = t => t.note ? `\n      - ${t.note.split("\n")[0]}` : "";
+    const L = [];
+    const team = state.reportExtra.team.trim();
+    L.push(`${team ? team + " " : ""}주간 업무 보고 (${weekOfMonthLabel(mon)}, ${md(ymd(mon))}~${md(ymd(sun))})`);
+    L.push("");
+    L.push("□ 금주 실적");
+    if (!done.length && !ongoing.length) L.push("  ○ 해당 없음");
+    for (const [k, arr] of group([...done, ...ongoing.filter(t => !done.includes(t))])) {
+      L.push(`  ○ ${k}`);
+      for (const t of arr) {
+        const st = t.status === "done" ? `완료(${md(t.doneAt)})` : `${STATUS_LABEL[t.status]} ${t.progress ?? 0}%`;
+        L.push(`    - ${sub(t)}${t.title} : ${st}${noteLine(t)}`);
+      }
+    }
+    L.push("");
+    L.push("□ 차주 계획");
+    if (!plan.length) L.push("  ○ 해당 없음");
+    for (const [k, arr] of group(plan)) {
+      L.push(`  ○ ${k}`);
+      for (const t of arr.sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"))) L.push(`    - ${sub(t)}${t.title}${t.due ? ` (~${md(t.due)})` : ""}`);
+    }
+    L.push("");
+    L.push("□ 이슈 및 리스크");
+    if (!issues.length && !state.reportExtra.issues.trim()) L.push("  ○ 특이사항 없음");
+    for (const t of issues) {
+      const why = t.status === "hold" ? "보류" : `지연 ${diffDays(lateAsOf, parse(t.due))}일 (마감 ${md(t.due)})`;
+      L.push(`  ○ ${sub(t)}${t.title} : ${why}${t.note ? ` — ${t.note.split("\n")[0]}` : ""}`);
+    }
+    for (const line of state.reportExtra.issues.split("\n").map(s => s.trim()).filter(Boolean)) L.push(`  ○ ${line}`);
+    L.push("");
+    L.push("□ 지원 요청");
+    const req = state.reportExtra.requests.split("\n").map(s => s.trim()).filter(Boolean);
+    if (!req.length) L.push("  ○ 없음");
+    for (const line of req) L.push(`  ○ ${line}`);
+    return { text: L.join("\n"), counts: { done: done.length, ongoing: ongoing.length, plan: plan.length, issues: issues.length }, mon };
+  }
+
+  function viewReport() {
+    const mon = state.weekStart || mondayOf(today());
+    const built = buildReport();
+    if (!state.reportDirty) state.reportText = built.text;
+    const out = el("textarea", { id: "reportOut", spellcheck: "false", "aria-label": "주간 보고서" });
+    out.value = state.reportText;
+    out.addEventListener("input", () => { state.reportText = out.value; state.reportDirty = true; dirtyNote.hidden = false; });
+    const dirtyNote = el("span", { class: "status-note", hidden: !state.reportDirty }, "직접 수정한 내용이 있습니다. ",
+      el("button", { class: "btn ghost", type: "button", text: "자동 생성으로 되돌리기", onclick: () => { state.reportDirty = false; render(); } }));
+    const shiftWeek = n => { state.weekStart = addDays(mon, n * 7); state.reportDirty = false; render(); };
+    const extra = (id, label, key, ph) => {
+      const ta = el("textarea", { id, rows: "3", placeholder: ph }); ta.value = state.reportExtra[key];
+      ta.addEventListener("input", () => { state.reportExtra[key] = ta.value; if (!state.reportDirty) { state.reportText = buildReport().text; out.value = state.reportText; } });
+      return el("div", { class: "field" }, el("label", { for: id, text: label }), ta);
+    };
+    const teamIn = el("input", { id: "rTeam", value: state.reportExtra.team, placeholder: "예: 플랫폼개발팀" });
+    teamIn.addEventListener("input", () => { state.reportExtra.team = teamIn.value; if (!state.reportDirty) { state.reportText = buildReport().text; out.value = state.reportText; } });
+
+    const copyBtn = el("button", { class: "btn primary", type: "button", text: "복사", onclick: async () => {
+      try { await navigator.clipboard.writeText(out.value); toast("복사했습니다. 메일·메신저에 붙여넣으세요."); }
+      catch { out.focus(); out.select(); toast("텍스트를 선택했습니다. Ctrl/⌘+C로 복사하세요."); }
+    } });
+    const dlBtn = el("button", { class: "btn", type: "button", text: ".md 저장", hidden: !state.downloads, onclick: async () => {
+      try { await state.downloads.save({ filename: `주간보고_${weekKey(mon)}.md`, data: out.value }); toast("저장했습니다"); }
+      catch (e) { if (e?.code !== "declined") toast("파일로 저장할 수 없는 환경입니다."); }
+    } });
+    const aiOut = el("span", { class: "status-note" });
+    let ctl = null;
+    const aiBtn = el("button", { class: "btn", type: "button", text: "AI로 다듬기", hidden: !state.sample, onclick: async () => {
+      if (ctl) { ctl.abort(); return; }
+      ctl = new AbortController();
+      const before = out.value;
+      aiBtn.textContent = "중지"; aiOut.textContent = "다듬는 중…";
+      try {
+        const prompt = "다음은 한국 회사의 실(부서) 주간 업무 보고서 초안이다. 사실·수치·일정·담당자는 절대 바꾸거나 추가하지 말고, " +
+          "□(대항목) ○(중항목) -(세부) 구조를 유지한 채 개조식 보고 문체(~함, ~예정, ~완료)로 간결하게 다듬어라. " +
+          "중복은 합치고, 이슈 항목에는 영향과 대응을 한 줄로 정리하되 원문에 없는 대응은 '대응 방안 검토 필요'로 둔다. 보고서 본문만 출력하라.\n\n" + before;
+        await state.sample(prompt, { signal: ctl.signal, cache: false, onText: ({ text }) => { out.value = text; } });
+        state.reportText = out.value; state.reportDirty = true; dirtyNote.hidden = false;
+        aiOut.textContent = "다듬었습니다. 숫자와 일정은 한 번 더 확인해 주세요.";
+      } catch (e) {
+        out.value = before;
+        aiOut.textContent = e?.code === "cancelled" ? "" : e?.code === "not_granted" || e?.code === "sampling_disabled" ? "이 보기에서는 AI 기능을 쓸 수 없습니다." : e?.code === "rate_limited" ? "요청이 많습니다. 잠시 후 다시 눌러 주세요." : "다듬지 못했습니다. 다시 시도해 주세요.";
+        if (e?.code === "not_granted" || e?.code === "sampling_disabled") aiBtn.hidden = true;
+      } finally { ctl = null; aiBtn.textContent = "AI로 다듬기"; }
+    } });
+    const saveBtn = el("button", { class: "btn", type: "button", text: "보고 기록 저장", hidden: !state.canWrite, onclick: async () => {
+      saveBtn.disabled = true;
+      await write(() => state.db.collection("reports").doc(weekKey(mon)).set({ week: weekKey(mon), label: weekOfMonthLabel(mon), monday: ymd(mon), text: out.value, savedAt: new Date().toISOString() }), "이번 주 보고를 기록했습니다");
+      saveBtn.disabled = false;
+    } });
+
+    const hist = state.reports.slice().sort((a, b) => b.week.localeCompare(a.week)).slice(0, 8);
+    const c = built.counts;
+    return el("div", { class: "report" },
+      el("aside", { class: "panel" },
+        el("div", { class: "week-nav" },
+          el("button", { class: "btn", type: "button", "aria-label": "이전 주", text: "‹", onclick: () => shiftWeek(-1) }),
+          el("span", { class: "lbl", text: `${weekOfMonthLabel(mon)} · ${md(ymd(mon))}~${md(ymd(addDays(mon, 6)))}` }),
+          el("button", { class: "btn", type: "button", "aria-label": "다음 주", text: "›", onclick: () => shiftWeek(1) }),
+          ymd(mon) !== ymd(mondayOf(today())) ? el("button", { class: "btn ghost", type: "button", text: "이번 주", onclick: () => { state.weekStart = null; state.reportDirty = false; render(); } }) : null),
+        el("div", { class: "meta" },
+          el("span", { class: "chip ok", text: `완료 ${c.done}` }), el("span", { class: "chip info", text: `진행 ${c.ongoing}` }),
+          el("span", { class: "chip", text: `차주 ${c.plan}` }), el("span", { class: "chip crit", text: `이슈 ${c.issues}` })),
+        el("div", { class: "field" }, el("label", { text: "정리 기준" }),
+          el("div", { class: "seg", role: "group" },
+            el("button", { type: "button", "aria-pressed": String(state.reportGroup === "member"), text: "담당자별", onclick: () => { state.reportGroup = "member"; state.reportDirty = false; render(); } }),
+            el("button", { type: "button", "aria-pressed": String(state.reportGroup === "project"), text: "프로젝트별", onclick: () => { state.reportGroup = "project"; state.reportDirty = false; render(); } }))),
+        el("div", { class: "field" }, el("label", { for: "rTeam", text: "팀 이름" }), teamIn),
+        extra("rIssues", "추가 이슈 (한 줄에 하나)", "issues", "예: QA 인력 부족으로 회귀 테스트 일정 1주 지연 우려"),
+        extra("rReq", "지원 요청 (한 줄에 하나)", "requests", "예: 스토어 심사용 테스트 계정 발급 요청"),
+        el("p", { class: "status-note", text: "위의 담당자·프로젝트 필터가 보고 범위에도 적용됩니다. 완료 처리한 날짜가 그 주에 속한 업무가 금주 실적에 들어갑니다." }),
+        hist.length ? el("div", { class: "history" }, el("h3", { class: "eyebrow", text: "저장된 보고" }),
+          hist.map(r => el("button", { class: "row", type: "button", onclick: () => { state.weekStart = parse(r.monday); state.reportText = r.text; state.reportDirty = true; render(); } },
+            el("span", { class: "t", text: r.label || r.week }), el("span", { class: "muted num", text: r.week })))) : null),
+      el("section", { style: "display:grid;gap:8px;min-width:0" },
+        el("div", { class: "actions" }, copyBtn, dlBtn, aiBtn, saveBtn, aiOut), dirtyNote, out));
+  }
+
+  function viewTeam() {
+    const box = el("div", { style: "display:grid;gap:12px" });
+    if (state.canWrite) {
+      const name = el("input", { id: "tName", placeholder: "이름", "aria-label": "이름" });
+      const role = el("input", { id: "tRole", placeholder: "역할 (예: iOS, 서버, QA)", "aria-label": "역할" });
+      const add = async () => {
+        const n = name.value.trim(); if (!n) { name.focus(); return; }
+        if (state.members.some(m => m.name === n)) { toast("이미 등록된 이름입니다."); return; }
+        const ok = await write(() => state.db.collection("members").doc().set({ name: n, role: role.value.trim(), order: state.members.length, createdAt: new Date().toISOString() }), `${n} 님을 등록했습니다`);
+        if (ok) { name.value = ""; role.value = ""; name.focus(); }
+      };
+      name.addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+      role.addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+      box.append(el("div", { class: "add-member" }, name, role, el("button", { class: "btn primary", type: "button", text: "팀원 추가", onclick: add })));
+    }
+    if (!state.members.length) { box.append(el("div", { class: "empty" }, el("h2", { text: "등록된 팀원이 없습니다" }), el("p", { text: "이름과 역할을 입력해 팀원을 추가하세요. 업무 담당자와 주간보고 정리 순서에 쓰입니다." }))); return box; }
+    box.append(el("div", { class: "members" }, state.members.map(m => {
+      const mine = state.tasks.filter(t => t.memberId === m.id);
+      const open = mine.filter(t => t.status !== "done");
+      const late = open.filter(isLate).length;
+      const actions = el("div", { class: "actions" },
+        el("button", { class: "btn", type: "button", text: "업무 보기", onclick: () => { state.filter.member = m.id; go("board"); } }));
+      if (state.canWrite) {
+        const del = el("button", { class: "btn ghost danger", type: "button", text: "삭제", onclick: () => {
+          actions.replaceChildren(el("span", { class: "confirm-del" }, open.length ? `진행 중 업무 ${open.length}건은 미지정이 됩니다.` : "삭제할까요?",
+            el("button", { class: "btn danger", type: "button", text: "삭제", onclick: () => write(() => state.db.collection("members").doc(m.id).delete(), "삭제했습니다") }),
+            el("button", { class: "btn ghost", type: "button", text: "취소", onclick: () => render() })));
+        } });
+        actions.append(del);
+      }
+      return el("article", { class: "member" },
+        el("div", {}, el("div", { class: "name", text: m.name }), m.role ? el("div", { class: "muted", text: m.role }) : null),
+        el("div", { class: "load" },
+          el("span", { class: "chip info", text: `진행 ${open.filter(t => t.status === "doing" || t.status === "review").length}` }),
+          el("span", { class: "chip", text: `대기 ${open.filter(t => t.status === "todo").length}` }),
+          late ? el("span", { class: "chip crit", text: `지연 ${late}` }) : null,
+          el("span", { class: "chip ok", text: `완료 ${mine.length - open.length}` })),
+        actions);
+    })));
+    return box;
+  }
+
+  // ---------- render ----------
+  function renderFilters() {
+    const fm = $("#fMember"), fp = $("#fProject"), fq = $("#fQuery");
+    fm.replaceChildren(el("option", { value: "", text: "담당자 전체" }), state.members.map(m => el("option", { value: m.id, text: m.name })), el("option", { value: "_none", text: "미지정" }));
+    fm.value = state.filter.member;
+    fp.replaceChildren(el("option", { value: "", text: "프로젝트 전체" }), projects().map(p => el("option", { value: p, text: p })));
+    fp.value = state.filter.project;
+    if (fq.value !== state.filter.q) fq.value = state.filter.q;
+    $("#filters").hidden = state.view === "team";
+  }
+  function renderSummary() {
+    const mon = mondayOf(today()), nMon = addDays(mon, 7), sun = addDays(mon, 6);
+    const open = state.tasks.filter(t => t.status !== "done");
+    $("#sDoing").textContent = state.tasks.filter(t => t.status === "doing" || t.status === "review").length;
+    $("#sWeek").textContent = open.filter(t => t.due && parse(t.due) >= today() && parse(t.due) < nMon).length;
+    $("#sLate").textContent = open.filter(isLate).length;
+    $("#sDone").textContent = state.tasks.filter(t => t.status === "done" && t.doneAt && parse(t.doneAt) >= mon && parse(t.doneAt) <= sun).length;
+  }
+  function render() {
+    document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === state.view)));
+    $("#addTaskBtn").hidden = !state.canWrite;
+    renderFilters(); renderSummary();
+    const v = $("#view");
+    const ready = state.loaded.tasks && state.loaded.members;
+    let node;
+    if (state.view === "team") node = viewTeam();
+    else if (ready && !state.tasks.length && state.view !== "report") node = emptyState();
+    else node = ({ board: viewBoard, list: viewList, cal: viewCal, report: viewReport })[state.view]();
+    // keep report textarea focus/caret across live re-renders
+    const ae = document.activeElement, keepId = ae && ae.id, sel = ae && "selectionStart" in ae ? [ae.selectionStart, ae.selectionEnd] : null;
+    v.replaceChildren(node);
+    if (keepId) { const n = document.getElementById(keepId); if (n && n !== ae) { n.focus(); if (sel && "setSelectionRange" in n) try { n.setSelectionRange(...sel); } catch {} } }
+  }
+  const VIEWS = ["board", "list", "cal", "report", "team"];
+  function go(view) { state.view = view; if (location.hash !== "#" + view) history.replaceState(null, "", "#" + view); render(); }
+
+  // ---------- events ----------
+  document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => go(b.dataset.view)));
+  document.querySelectorAll(".stat").forEach(b => b.addEventListener("click", () => { state.filter.status = ""; go(b.dataset.jump); }));
+  $("#addTaskBtn").addEventListener("click", () => openTask());
+  $("#fMember").addEventListener("change", e => { state.filter.member = e.target.value; state.reportDirty = false; render(); });
+  $("#fProject").addEventListener("change", e => { state.filter.project = e.target.value; state.reportDirty = false; render(); });
+  let qT; $("#fQuery").addEventListener("input", e => { clearTimeout(qT); qT = setTimeout(() => { state.filter.q = e.target.value; render(); }, 150); });
+  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (VIEWS.includes(h) && h !== state.view) { state.view = h; render(); } });
+
+  const t0 = today();
+  $("#todayLbl").textContent = `${t0.getFullYear()}.${pad(t0.getMonth() + 1)}.${pad(t0.getDate())} (${DOW[(t0.getDay() + 6) % 7]}) · ${weekOfMonthLabel(mondayOf(t0))}`;
+  const h = location.hash.slice(1); if (VIEWS.includes(h)) state.view = h;
+  render();
+
+  // ---------- connect ----------
+  (async () => {
+    const C = window.claude;
+    if (!C?.use) { setNote("저장소에 연결할 수 없는 환경입니다. claude.ai에서 열어 주세요.", true); state.canWrite = false; render(); return; }
+    const [db, user, sample, downloads] = await Promise.all(["db", "user", "sample", "downloads"].map(n => C.use(n).catch(() => null)));
+    state.db = db; state.user = user; state.sample = sample; state.downloads = downloads;
+    if (!db) { setNote("데이터를 불러올 수 없습니다. 로그인했는지 확인해 주세요.", true); state.canWrite = false; render(); return; }
+    try {
+      const can = user ? await user.can("data.write") : null;
+      if (can === false) { state.canWrite = false; state.canWriteKnown = true; }
+      else if (can === true) state.canWriteKnown = true;
+    } catch {}
+    let settled = 0;
+    const timer = setTimeout(() => { if (settled < 2) setNote("데이터에 아직 연결되지 않았습니다. 잠시 기다려 주세요.", true); }, 10000);
+    const done = () => { settled++; if (settled >= 2) { clearTimeout(timer); setNote(state.canWrite ? "팀원 모두가 같은 보드를 실시간으로 봅니다." : "보기 전용으로 열려 있습니다."); } };
+    const onErr = e => { clearTimeout(timer); setNote(e?.code === "revoked" ? "접근 권한이 바뀌었습니다." : "데이터 연결이 끊겼습니다. 페이지를 다시 열어 주세요.", true); };
+    let tDone = false, mDone = false;
+    db.collection("tasks").onSnapshot(snap => {
+      state.tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      state.loaded.tasks = true; if (!snap.metadata.fromCache && !tDone) { tDone = true; done(); }
+      render();
+    }, onErr);
+    db.collection("members").orderBy("order").onSnapshot(snap => {
+      state.members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      state.loaded.members = true; if (!snap.metadata.fromCache && !mDone) { mDone = true; done(); }
+      render();
+    }, onErr);
+    db.collection("reports").onSnapshot(snap => { state.reports = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (state.view === "report") render(); }, () => {});
+  })();
+})();
+</script>

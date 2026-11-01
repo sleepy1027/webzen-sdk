@@ -8,7 +8,7 @@
       "name": "work-system",
       "source": "./",
       "description": "AI 업무 시스템 + 팀 업무 보드",
-      "version": "0.5.0"
+      "version": "0.5.1"
     }
   ]
 }

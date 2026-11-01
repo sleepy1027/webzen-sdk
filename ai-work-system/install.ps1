@@ -2,6 +2,7 @@
 #   install.cmd 더블클릭, 또는: powershell -ExecutionPolicy Bypass -File install.ps1
 # 기존 스킬·에이전트·지침은 덮어쓰지 않는다 (겹치면 ws-<이름>으로 설치, CLAUDE.md는 백업 후 한 줄 추가).
 $ErrorActionPreference = "Stop"
+trap { Write-Host ""; Write-Host "[오류] $($_.Exception.Message)" -ForegroundColor Red; Write-Host "  위치: $($_.InvocationInfo.PositionMessage)"; exit 1 }
 $Src = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ClaudeHome = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".claude" }
 $HomeDir = Join-Path $ClaudeHome "work-system"

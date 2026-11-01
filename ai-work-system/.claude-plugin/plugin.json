@@ -1,0 +1,10 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "work-system",
+  "version": "0.4.0",
+  "description": "AI 업무 시스템: 기본 작업 프로토콜, 피드백 반영, 자가 개선, 팀 업무 보드와 실 주간보고, 4단계 업무 스킬화 가이드",
+  "author": {
+    "name": "sleepy1027"
+  },
+  "keywords": ["productivity", "weekly-report", "task-board", "korean"]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "work-system-local",
+  "owner": {
+    "name": "sleepy1027"
+  },
+  "plugins": [
+    {
+      "name": "work-system",
+      "source": "./",
+      "description": "AI 업무 시스템 + 팀 업무 보드",
+      "version": "0.4.0"
+    }
+  ]
+}

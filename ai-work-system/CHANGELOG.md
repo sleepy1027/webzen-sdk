@@ -3,6 +3,13 @@
 버전은 `VERSION` 파일과 맞춘다. 스킬·에이전트·지침을 바꿀 때마다 한 줄 이상 남긴다.
 형식: `## x.y.z — YYYY-MM-DD` 아래 `- [파일] 변경 내용 (이유)`
 
+## 0.4.0 — 2026-11-01
+- [패키지] Claude Code 플러그인(work-system) + 로컬 마켓플레이스로 구성, zip 하나로 배포
+- [install.sh / install.ps1 / install.cmd] 한 번에 설치 (플러그인 설치, 실패 시 직접 복사, 작업 시스템 홈 생성, CLAUDE.md 연결)
+- [skills/work-setup] 세션 자료를 읽어 지침·팀원·업무를 채우고 계정별 보드를 만드는 초기 설정
+- [개인 설정 분리] ~/.claude/work-system/ (AGENTS, INSTRUCTIONS, LESSONS, CONFIG) — 업데이트해도 유지
+- [team-board] 보드 URL을 CONFIG.md에서 읽음, HTML을 스킬 assets로 이동
+
 ## 0.3.0 — 2026-11-01
 - [tools/team-board.html] 팀 업무 보드 웹 툴 추가 (팀원·업무 관리, 일정 체크, 실 주간보고 자동 생성)
 - [skills/team-board] 보드 데이터 연동 스킬 추가

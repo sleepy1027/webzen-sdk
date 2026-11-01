@@ -23,5 +23,5 @@ else
   echo "업데이트: v$OLD → v$NEW"
   git diff --stat "$BEFORE" HEAD -- .
 fi
-"$ROOT/scripts/install.sh" "$@"
+bash "$ROOT/install.sh"
 if command -v zip >/dev/null; then "$ROOT/scripts/package.sh"; fi

@@ -27,4 +27,9 @@
 - 원문: "내 업무들을 노션처럼 관리할 수 있도록 필요하다면 툴을 만들어줘. 팀원들과 내 일을 추가하고, 일정을 체크하고 주마다 실에 보고함"
 - 요구사항: 나 + 팀원 업무 추가/관리, 일정(마감) 체크, 매주 실(부서) 보고서 작성
 - 결정: Notion이 아닌 전용 웹 툴(claude.ai Artifact)로 만든다. 주간보고는 기본 양식(□ 금주 실적 / □ 차주 계획 / □ 이슈 및 리스크 / □ 지원 요청)으로 한다.
-- 반영: `tools/team-board.html` → https://claude.ai/artifact/R4DWa9bB3NRAEvD1Ty6pZo (보드·목록·일정·주간보고·팀원 탭, 팀 공유 DB, AI로 다듬기, .md 저장, 보고 기록), `skills/team-board`(다른 Claude가 보드 데이터를 읽고 쓰는 방법)
+- 반영: `skills/team-board/assets/team-board.html` (원래 `tools/`) → https://claude.ai/artifact/R4DWa9bB3NRAEvD1Ty6pZo (보드·목록·일정·주간보고·팀원 탭, 팀 공유 DB, AI로 다듬기, .md 저장, 보고 기록), `skills/team-board`(다른 Claude가 보드 데이터를 읽고 쓰는 방법)
+
+## 6. 회사 PC용 한 번에 설치 패키지 (2026-11-01)
+- 원문: "회사 계정으로 만든 다른 PC에서 데이터를 넣어놓은 새 세션에 사용할 예정이야. 그러니까 패키지 형태로 깔 수 있게 한 방에 만들어 주어."
+- 해석: 개인 계정에 묶인 것(보드 URL) 없이, zip 하나 + 설치 명령 한 번으로 설치되고, 자료가 있는 새 세션에서 초기 설정 한 번으로 지침·보드·데이터까지 갖춰지게 한다. 회사 PC는 Windows일 가능성이 높아 PowerShell 설치도 지원한다.
+- 반영: `.claude-plugin/`(플러그인+로컬 마켓플레이스), `install.sh`/`install.ps1`/`install.cmd`, `skills/work-setup`(세션 자료 기반 초기 설정), 개인 설정을 `~/.claude/work-system/`로 분리(업데이트해도 유지), team-board 스킬은 CONFIG.md에서 보드 URL을 읽음, `scripts/package.sh`가 `dist/work-system-<버전>.zip` 생성
